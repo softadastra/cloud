@@ -1,0 +1,49 @@
+/**
+ *
+ *  @file RunRoutes.hpp
+ *  @author Gaspard Kirira
+ *
+ *  Copyright 2026, Softadastra.
+ *  All rights reserved.
+ *  https://github.com/softadastra/cloud
+ *
+ *  Licensed under the Apache License, Version 2.0.
+ *
+ *  Softadastra Cloud
+ *
+ */
+
+#ifndef SOFTADASTRA_CLOUD_MODULES_RUNS_RUN_ROUTES_HPP
+#define SOFTADASTRA_CLOUD_MODULES_RUNS_RUN_ROUTES_HPP
+
+#include <vix.hpp>
+
+#include "app/AppState.hpp"
+
+namespace softadastra::cloud::modules::runs
+{
+  /**
+   * @brief Registers reliability run routes.
+   *
+   * RunRoutes only declares HTTP paths and forwards requests to RunController.
+   */
+  class RunRoutes final
+  {
+  public:
+    /**
+     * @brief Registers run routes on the Vix app.
+     *
+     * @param app Vix application.
+     * @param state Shared application state.
+     */
+    static void register_routes(
+        vix::App &app,
+        const softadastra::cloud::app::AppState &state);
+
+  private:
+    RunRoutes() = delete;
+  };
+
+} // namespace softadastra::cloud::modules::runs
+
+#endif // SOFTADASTRA_CLOUD_MODULES_RUNS_RUN_ROUTES_HPP
