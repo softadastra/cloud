@@ -5,14 +5,13 @@
 #include "modules/agents/AgentService.hpp"
 
 #include <algorithm>
-#include <functional>
-#include <sstream>
 #include <string>
 
 #include <vix/log/Log.hpp>
 
 #include "utils/IdGenerator.hpp"
 #include "utils/Time.hpp"
+#include "security/ApiKeyHasher.hpp"
 
 namespace softadastra::cloud::modules::agents
 {
@@ -20,24 +19,6 @@ namespace softadastra::cloud::modules::agents
   {
     constexpr std::size_t MIN_AGENT_NAME_LENGTH = 2;
     constexpr std::size_t MAX_AGENT_NAME_LENGTH = 120;
-
-    [[nodiscard]] std::string hash_payload(
-        const std::string &secret,
-        const std::string &api_key)
-    {
-      /*
-       * MVP note:
-       * This is intentionally isolated behind AgentService::hash_api_key().
-       * Later we will replace it with ApiKeyHasher from src/security.
-       */
-      const std::hash<std::string> hasher;
-      const auto value = hasher(secret + ":" + api_key);
-
-      std::ostringstream out;
-      out << "v1$" << value;
-
-      return out.str();
-    }
   }
 
   AgentService::AgentService(
@@ -346,16 +327,15 @@ namespace softadastra::cloud::modules::agents
 
   std::string AgentService::generate_api_key()
   {
-    return "sa_agent_" +
-           softadastra::cloud::utils::IdGenerator::generate("key");
+    return softadastra::cloud::security::ApiKeyHasher::generate_agent_key();
   }
 
   std::string AgentService::hash_api_key(
       const softadastra::cloud::app::AppState &state,
       const std::string &api_key)
   {
-    return hash_payload(
-        state.config.agent_api_key_secret,
+    return softadastra::cloud::security::ApiKeyHasher::hash(
+        state.config,
         api_key);
   }
 

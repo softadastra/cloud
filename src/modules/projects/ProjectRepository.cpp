@@ -33,18 +33,35 @@ namespace softadastra::cloud::modules::projects
   {
     try
     {
-      database_->exec(
-          "INSERT INTO projects ("
-          "public_id, user_id, name, slug, description, base_url, created_at, updated_at"
-          ") VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-          public_id,
-          user_id,
-          name,
-          slug,
-          description,
-          base_url,
-          now_ms,
-          now_ms);
+      if (user_id > 0)
+      {
+        database_->exec(
+            "INSERT INTO projects ("
+            "public_id, user_id, name, slug, description, base_url, created_at, updated_at"
+            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            public_id,
+            user_id,
+            name,
+            slug,
+            description,
+            base_url,
+            now_ms,
+            now_ms);
+      }
+      else
+      {
+        database_->exec(
+            "INSERT INTO projects ("
+            "public_id, user_id, name, slug, description, base_url, created_at, updated_at"
+            ") VALUES (?, NULL, ?, ?, ?, ?, ?, ?)",
+            public_id,
+            name,
+            slug,
+            description,
+            base_url,
+            now_ms,
+            now_ms);
+      }
 
       return true;
     }
@@ -237,7 +254,7 @@ namespace softadastra::cloud::modules::projects
   }
 
   Project ProjectRepository::project_from_current_row(
-      const vix::db::Row &row)
+      const vix::db::ResultRow &row)
   {
     Project project;
 

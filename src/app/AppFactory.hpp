@@ -16,6 +16,8 @@
 #ifndef SOFTADASTRA_CLOUD_APP_APP_FACTORY_HPP
 #define SOFTADASTRA_CLOUD_APP_APP_FACTORY_HPP
 
+#include <memory>
+
 #include <vix.hpp>
 
 #include "app/AppState.hpp"
@@ -39,7 +41,7 @@ namespace softadastra::cloud::app
      * @param state Shared application state.
      * @return Configured Vix App instance.
      */
-    [[nodiscard]] static vix::App create(const AppState &state);
+    [[nodiscard]] static std::unique_ptr<vix::App> create(const AppState &state);
 
   private:
     AppFactory() = delete;

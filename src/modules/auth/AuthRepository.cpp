@@ -108,7 +108,7 @@ namespace softadastra::cloud::modules::auth
   }
 
   AuthUser AuthRepository::user_from_current_row(
-      const vix::db::Row &row)
+      const vix::db::ResultRow &row)
   {
     AuthUser user;
 

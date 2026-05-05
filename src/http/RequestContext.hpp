@@ -87,6 +87,9 @@ namespace softadastra::cloud::http
 
     /**
      * @brief Clears authentication-related fields.
+     *
+     * The request id is intentionally preserved because it is useful for
+     * tracing logs even when authentication fails.
      */
     void clear_auth() noexcept;
   };

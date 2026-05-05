@@ -202,7 +202,7 @@ namespace softadastra::cloud::modules::runs
     std::shared_ptr<vix::db::Database> database_;
 
     [[nodiscard]] static Run run_from_current_row(
-        const vix::db::Row &row);
+        const vix::db::ResultRow &row);
 
     [[nodiscard]] static int normalize_limit(int limit) noexcept;
     [[nodiscard]] static int normalize_offset(int offset) noexcept;

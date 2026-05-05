@@ -11,6 +11,7 @@
 
 #include "http/JsonResponse.hpp"
 #include "http/RequestContext.hpp"
+#include "modules/agents/AgentService.hpp"
 
 namespace softadastra::cloud::middlewares
 {
@@ -18,27 +19,28 @@ namespace softadastra::cloud::middlewares
   {
     constexpr const char *AGENT_API_KEY_HEADER = "x-agent-api-key";
 
-    [[nodiscard]] bool constant_time_equals(
-        const std::string &a,
-        const std::string &b) noexcept
+    [[nodiscard]] std::string read_agent_api_key(
+        const vix::Request &req)
     {
-      if (a.size() != b.size())
+      std::string api_key =
+          req.header(AGENT_API_KEY_HEADER);
+
+      if (!api_key.empty())
       {
-        return false;
+        return api_key;
       }
 
-      unsigned char diff = 0;
+      /*
+       * Compatibility with the API documentation.
+       */
+      api_key = req.header("X-Agent-Key");
 
-      for (std::size_t i = 0; i < a.size(); ++i)
-      {
-        diff |= static_cast<unsigned char>(a[i] ^ b[i]);
-      }
-
-      return diff == 0;
+      return api_key;
     }
 
     void attach_agent_context(
-        vix::Request &req)
+        vix::Request &req,
+        const softadastra::cloud::modules::agents::Agent &agent)
     {
       auto *context =
           req.try_state<softadastra::cloud::http::RequestContext>();
@@ -46,9 +48,10 @@ namespace softadastra::cloud::middlewares
       if (context == nullptr)
       {
         softadastra::cloud::http::RequestContext fresh_context;
+
         fresh_context.set_agent_auth(
-            "local-agent",
-            "local-project");
+            agent.public_id,
+            agent.project_public_id);
 
         req.emplace_state<softadastra::cloud::http::RequestContext>(
             fresh_context);
@@ -57,8 +60,8 @@ namespace softadastra::cloud::middlewares
       }
 
       context->set_agent_auth(
-          "local-agent",
-          "local-project");
+          agent.public_id,
+          agent.project_public_id);
     }
   }
 
@@ -69,23 +72,8 @@ namespace softadastra::cloud::middlewares
         [&state](vix::middleware::Context &ctx,
                  vix::middleware::Next next)
         {
-          const std::string expected_key =
-              state.config.agent_api_key_secret;
-
-          if (expected_key.empty())
-          {
-            vix::log::error(
-                "agent authentication failed: missing configured API key secret");
-
-            softadastra::cloud::http::JsonResponse::internal_error(
-                ctx.res(),
-                "Agent authentication is not configured");
-
-            return;
-          }
-
           const std::string provided_key =
-              ctx.req().header(AGENT_API_KEY_HEADER);
+              read_agent_api_key(ctx.req());
 
           if (provided_key.empty())
           {
@@ -96,18 +84,27 @@ namespace softadastra::cloud::middlewares
             return;
           }
 
-          if (!constant_time_equals(provided_key, expected_key))
+          softadastra::cloud::modules::agents::AgentService service{state};
+
+          const auto result =
+              service.authenticate_api_key(provided_key);
+
+          if (!result.success)
           {
             vix::log::warn("agent authentication failed: invalid API key");
 
-            softadastra::cloud::http::JsonResponse::unauthorized(
+            softadastra::cloud::http::JsonResponse::error(
                 ctx.res(),
-                "Invalid agent API key");
+                result.status,
+                result.error,
+                result.message);
 
             return;
           }
 
-          attach_agent_context(ctx.req());
+          attach_agent_context(
+              ctx.req(),
+              result.agent);
 
           next();
         });

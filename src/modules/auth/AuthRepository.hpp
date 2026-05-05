@@ -119,7 +119,7 @@ namespace softadastra::cloud::modules::auth
     std::shared_ptr<vix::db::Database> database_;
 
     [[nodiscard]] static AuthUser user_from_current_row(
-        const vix::db::Row &row);
+        const vix::db::ResultRow &row);
   };
 
 } // namespace softadastra::cloud::modules::auth

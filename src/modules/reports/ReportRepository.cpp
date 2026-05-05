@@ -267,7 +267,7 @@ namespace softadastra::cloud::modules::reports
   }
 
   Report ReportRepository::report_from_current_row(
-      const vix::db::Row &row)
+      const vix::db::ResultRow &row)
   {
     Report report;
 

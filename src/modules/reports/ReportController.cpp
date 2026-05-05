@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include <vix/json/convert.hpp>
 #include <vix/json/json.hpp>
 #include <vix/log/Log.hpp>
 
@@ -22,24 +23,22 @@ namespace softadastra::cloud::modules::reports
   namespace
   {
     [[nodiscard]] bool has_string_field(
-        const J::token &body,
-        const std::string &field)
+        const J::Json &body,
+        std::string_view field)
     {
       return body.is_object() &&
-             body.contains(field) &&
-             body[field].is_string();
+             body.contains(std::string(field)) &&
+             body.at(std::string(field)).is_string();
     }
 
     [[nodiscard]] std::string string_field_or_empty(
-        const J::token &body,
-        const std::string &field)
+        const J::Json &body,
+        std::string_view field)
     {
-      if (!has_string_field(body, field))
-      {
-        return {};
-      }
-
-      return body[field].as_string_or("");
+      return J::get_or<std::string>(
+          body,
+          field,
+          "");
     }
 
     [[nodiscard]] int int_query_or(
@@ -66,58 +65,40 @@ namespace softadastra::cloud::modules::reports
     }
 
     [[nodiscard]] std::string report_payload_to_string(
-        const J::token &body)
+        const J::Json &body)
     {
       if (!body.is_object())
       {
         return {};
       }
 
-      if (body.contains("report"))
+      if (const J::Json *report = J::ptr(body, "report"))
       {
-        const auto &report = body["report"];
-
-        if (report.is_string())
+        if (report->is_string())
         {
-          return report.as_string_or("");
+          return report->get<std::string>();
         }
 
-        try
-        {
-          return report.dump();
-        }
-        catch (...)
-        {
-          return {};
-        }
+        return report->dump();
       }
 
-      if (body.contains("raw_json"))
+      if (const J::Json *raw_json = J::ptr(body, "raw_json"))
       {
-        const auto &raw_json = body["raw_json"];
-
-        if (raw_json.is_string())
+        if (raw_json->is_string())
         {
-          return raw_json.as_string_or("");
+          return raw_json->get<std::string>();
         }
 
-        try
-        {
-          return raw_json.dump();
-        }
-        catch (...)
-        {
-          return {};
-        }
+        return raw_json->dump();
       }
 
       return {};
     }
 
-    [[nodiscard]] J::token report_to_json(
+    [[nodiscard]] J::OrderedJson report_to_json(
         const Report &report)
     {
-      return J::obj({
+      return J::o(
           "id",
           report.public_id,
           "run_id",
@@ -129,22 +110,20 @@ namespace softadastra::cloud::modules::reports
           "created_at",
           report.created_at,
           "updated_at",
-          report.updated_at,
-      });
+          report.updated_at);
     }
 
-    [[nodiscard]] J::token reports_to_json(
+    [[nodiscard]] J::Json reports_to_json(
         const std::vector<Report> &reports)
     {
-      std::vector<J::token> items;
-      items.reserve(reports.size());
+      J::Json items = J::Json::array();
 
       for (const auto &report : reports)
       {
-        items.push_back(report_to_json(report));
+        items.push_back(J::Json(report_to_json(report)));
       }
 
-      return J::array(std::move(items));
+      return items;
     }
 
     void respond_report_result(
@@ -186,7 +165,7 @@ namespace softadastra::cloud::modules::reports
       softadastra::cloud::http::JsonResponse::data(
           res,
           result.message,
-          J::obj({
+          J::o(
               "count",
               static_cast<long long>(result.reports.size()),
               "total",
@@ -196,8 +175,7 @@ namespace softadastra::cloud::modules::reports
               "offset",
               result.offset,
               "items",
-              reports_to_json(result.reports),
-          }));
+              reports_to_json(result.reports)));
     }
   }
 
@@ -211,7 +189,7 @@ namespace softadastra::cloud::modules::reports
       const std::string run_id =
           req.param("id", "");
 
-      const auto &body = req.json();
+      const J::Json &body = req.json();
 
       if (!body.is_object())
       {
@@ -395,12 +373,11 @@ namespace softadastra::cloud::modules::reports
       softadastra::cloud::http::JsonResponse::data(
           res,
           result.message,
-          J::obj({
+          J::o(
               "id",
               result.report.public_id,
               "deleted",
-              true,
-          }));
+              true));
     }
     catch (const std::exception &e)
     {
@@ -442,14 +419,13 @@ namespace softadastra::cloud::modules::reports
       softadastra::cloud::http::JsonResponse::data(
           res,
           result.message,
-          J::obj({
+          J::o(
               "run_id",
               result.report.run_public_id,
               "report_id",
               result.report.public_id,
               "deleted",
-              true,
-          }));
+              true));
     }
     catch (const std::exception &e)
     {

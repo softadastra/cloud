@@ -9,6 +9,8 @@
 #include <string>
 #include <vector>
 
+#include <vix/json/convert.hpp>
+#include <vix/json/json.hpp>
 #include <vix/log/Log.hpp>
 
 #include "http/JsonResponse.hpp"
@@ -24,24 +26,22 @@ namespace softadastra::cloud::modules::agents
     constexpr const char *AGENT_API_KEY_HEADER = "x-agent-api-key";
 
     [[nodiscard]] bool has_string_field(
-        const J::token &body,
-        const std::string &field)
+        const J::Json &body,
+        std::string_view field)
     {
       return body.is_object() &&
-             body.contains(field) &&
-             body[field].is_string();
+             body.contains(std::string(field)) &&
+             body.at(std::string(field)).is_string();
     }
 
     [[nodiscard]] std::string string_field_or_empty(
-        const J::token &body,
-        const std::string &field)
+        const J::Json &body,
+        std::string_view field)
     {
-      if (!has_string_field(body, field))
-      {
-        return {};
-      }
-
-      return body[field].as_string_or("");
+      return J::get_or<std::string>(
+          body,
+          field,
+          "");
     }
 
     [[nodiscard]] int int_query_or(
@@ -67,10 +67,10 @@ namespace softadastra::cloud::modules::agents
       }
     }
 
-    [[nodiscard]] J::token agent_to_json(
+    [[nodiscard]] J::OrderedJson agent_to_json(
         const Agent &agent)
     {
-      return J::obj({
+      return J::o(
           "id",
           agent.public_id,
           "project_id",
@@ -82,35 +82,32 @@ namespace softadastra::cloud::modules::agents
           "created_at",
           agent.created_at,
           "updated_at",
-          agent.updated_at,
-      });
+          agent.updated_at);
     }
 
-    [[nodiscard]] J::token agents_to_json(
+    [[nodiscard]] J::Json agents_to_json(
         const std::vector<Agent> &agents)
     {
-      std::vector<J::token> items;
-      items.reserve(agents.size());
+      J::Json items = J::Json::array();
 
       for (const auto &agent : agents)
       {
-        items.push_back(agent_to_json(agent));
+        items.push_back(J::Json(agent_to_json(agent)));
       }
 
-      return J::array(std::move(items));
+      return items;
     }
 
-    [[nodiscard]] J::token agent_with_key_to_json(
+    [[nodiscard]] J::OrderedJson agent_with_key_to_json(
         const AgentResult &result)
     {
-      return J::obj({
+      return J::o(
           "agent",
           agent_to_json(result.agent),
           "api_key",
           result.api_key,
           "api_key_warning",
-          "Store this key now. It will not be shown again.",
-      });
+          "Store this key now. It will not be shown again.");
     }
 
     void respond_agent_result(
@@ -154,6 +151,7 @@ namespace softadastra::cloud::modules::agents
       if (context == nullptr)
       {
         softadastra::cloud::http::RequestContext fresh_context;
+
         fresh_context.set_agent_auth(
             agent.public_id,
             agent.project_public_id);
@@ -177,7 +175,7 @@ namespace softadastra::cloud::modules::agents
   {
     try
     {
-      const auto &body = req.json();
+      const J::Json &body = req.json();
 
       if (!body.is_object())
       {
@@ -269,7 +267,7 @@ namespace softadastra::cloud::modules::agents
       softadastra::cloud::http::JsonResponse::data(
           res,
           result.message,
-          J::obj({
+          J::o(
               "count",
               static_cast<long long>(result.agents.size()),
               "total",
@@ -279,8 +277,7 @@ namespace softadastra::cloud::modules::agents
               "offset",
               result.offset,
               "items",
-              agents_to_json(result.agents),
-          }));
+              agents_to_json(result.agents)));
     }
     catch (const std::exception &e)
     {
@@ -378,12 +375,11 @@ namespace softadastra::cloud::modules::agents
       softadastra::cloud::http::JsonResponse::data(
           res,
           result.message,
-          J::obj({
+          J::o(
               "id",
               result.agent.public_id,
               "deleted",
-              true,
-          }));
+              true));
     }
     catch (const std::exception &e)
     {
@@ -429,12 +425,11 @@ namespace softadastra::cloud::modules::agents
       softadastra::cloud::http::JsonResponse::data(
           res,
           "Agent authenticated",
-          J::obj({
+          J::o(
               "authenticated",
               true,
               "agent",
-              agent_to_json(result.agent),
-          }));
+              agent_to_json(result.agent)));
     }
     catch (const std::exception &e)
     {

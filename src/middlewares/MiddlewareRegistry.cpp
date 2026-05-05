@@ -50,6 +50,8 @@ namespace softadastra::cloud::middlewares
           "Origin",
           "X-Requested-With",
           "X-Agent-Api-Key",
+          "x-agent-api-key",
+          "X-Agent-Key",
           "X-Request-Id",
       };
 
@@ -109,11 +111,12 @@ namespace softadastra::cloud::middlewares
       vix::App &app,
       const softadastra::cloud::app::AppState &state)
   {
-    vix::middleware::app::install(
-        app,
-        "/api/agent/",
-        AgentAuthMiddleware::create(state));
-
+    /*
+     * Agent-protected endpoints.
+     *
+     * These endpoints are used by the local agent runtime to submit
+     * reliability runs, events and reports.
+     */
     vix::middleware::app::install(
         app,
         "/api/runs",

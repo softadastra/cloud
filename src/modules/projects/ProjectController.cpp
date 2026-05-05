@@ -10,6 +10,8 @@
 #include <vector>
 
 #include <vix/log/Log.hpp>
+#include <vix/json/json.hpp>
+#include <vix/json/convert.hpp>
 
 #include "http/JsonResponse.hpp"
 #include "modules/projects/ProjectService.hpp"
@@ -21,24 +23,22 @@ namespace softadastra::cloud::modules::projects
   namespace
   {
     [[nodiscard]] bool has_string_field(
-        const J::token &body,
-        const std::string &field)
+        const J::Json &body,
+        std::string_view field)
     {
       return body.is_object() &&
-             body.contains(field) &&
-             body[field].is_string();
+             body.contains(std::string(field)) &&
+             body.at(std::string(field)).is_string();
     }
 
     [[nodiscard]] std::string string_field_or_empty(
-        const J::token &body,
-        const std::string &field)
+        const J::Json &body,
+        std::string_view field)
     {
-      if (!has_string_field(body, field))
-      {
-        return {};
-      }
-
-      return body[field].as_string_or("");
+      return J::get_or<std::string>(
+          body,
+          field,
+          "");
     }
 
     [[nodiscard]] int int_query_or(

@@ -34,7 +34,7 @@ namespace
 
     vix::config::Config vix_config{".env"};
 
-    softadastra::cloud::config::CloudConfig cloud_config =
+    const softadastra::cloud::config::CloudConfig cloud_config =
         softadastra::cloud::config::CloudConfig::from(vix_config);
 
     auto database =
@@ -42,12 +42,12 @@ namespace
 
     softadastra::cloud::database::Migrations::run(*database);
 
-    softadastra::cloud::app::AppState state{
+    const softadastra::cloud::app::AppState state{
         cloud_config,
         database,
     };
 
-    vix::App app =
+    auto app =
         softadastra::cloud::app::AppFactory::create(state);
 
     vix::log::logf(
@@ -57,7 +57,7 @@ namespace
         "environment", cloud_config.environment,
         "port", cloud_config.server_port);
 
-    app.run(cloud_config.server_port);
+    app->run(cloud_config.server_port);
 
     return 0;
   }

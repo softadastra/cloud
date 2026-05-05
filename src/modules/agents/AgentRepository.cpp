@@ -310,7 +310,7 @@ namespace softadastra::cloud::modules::agents
   }
 
   Agent AgentRepository::agent_from_current_row(
-      const vix::db::Row &row)
+      const vix::db::ResultRow &row)
   {
     Agent agent;
 

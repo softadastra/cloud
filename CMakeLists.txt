@@ -53,12 +53,12 @@ endfunction()
 
 function(cloud_configure_target target_name)
   target_include_directories(${target_name}
-    PRIVATE
+    PUBLIC
       ${CMAKE_CURRENT_SOURCE_DIR}/src
   )
 
   target_link_libraries(${target_name}
-    PRIVATE
+    PUBLIC
       vix::vix
   )
 
@@ -68,8 +68,7 @@ endfunction()
 
 # ------------------------------------------------------
 # Core backend sources
-# ------------------------------------------------------
-set(SOFTADASTRA_CLOUD_SOURCES
+set(SOFTADASTRA_CLOUD_EXPECTED_SOURCES
   src/app/AppFactory.cpp
 
   src/config/CloudConfig.cpp
@@ -128,6 +127,20 @@ set(SOFTADASTRA_CLOUD_SOURCES
   src/utils/Time.cpp
   src/utils/IdGenerator.cpp
 )
+
+set(SOFTADASTRA_CLOUD_SOURCES)
+
+foreach(source_file IN LISTS SOFTADASTRA_CLOUD_EXPECTED_SOURCES)
+  if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${source_file}")
+    list(APPEND SOFTADASTRA_CLOUD_SOURCES "${source_file}")
+  else()
+    message(WARNING "Softadastra Cloud source not found, skipped: ${source_file}")
+  endif()
+endforeach()
+
+if(SOFTADASTRA_CLOUD_SOURCES STREQUAL "")
+  message(FATAL_ERROR "No Softadastra Cloud source files found.")
+endif()
 
 # ------------------------------------------------------
 # Core library

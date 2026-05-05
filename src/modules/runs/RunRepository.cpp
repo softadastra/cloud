@@ -386,7 +386,7 @@ namespace softadastra::cloud::modules::runs
   }
 
   Run RunRepository::run_from_current_row(
-      const vix::db::Row &row)
+      const vix::db::ResultRow &row)
   {
     Run run;
 

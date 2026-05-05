@@ -8,6 +8,8 @@
 #include <string>
 
 #include <vix/log/Log.hpp>
+#include <vix/json/json.hpp>
+#include <vix/json/convert.hpp>
 
 #include "http/JsonResponse.hpp"
 #include "modules/auth/AuthService.hpp"
@@ -19,24 +21,22 @@ namespace softadastra::cloud::modules::auth
   namespace
   {
     [[nodiscard]] bool has_string_field(
-        const J::token &body,
-        const std::string &field)
+        const vix::json::Json &body,
+        std::string_view field)
     {
       return body.is_object() &&
-             body.contains(field) &&
-             body[field].is_string();
+             body.contains(std::string(field)) &&
+             body.at(std::string(field)).is_string();
     }
 
     [[nodiscard]] std::string string_field_or_empty(
-        const J::token &body,
-        const std::string &field)
+        const vix::json::Json &body,
+        std::string_view field)
     {
-      if (!has_string_field(body, field))
-      {
-        return {};
-      }
-
-      return body[field].as_string_or("");
+      return vix::json::get_or<std::string>(
+          body,
+          field,
+          "");
     }
   }
 

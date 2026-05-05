@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include <vix/json/convert.hpp>
 #include <vix/json/json.hpp>
 #include <vix/log/Log.hpp>
 
@@ -22,24 +23,22 @@ namespace softadastra::cloud::modules::events
   namespace
   {
     [[nodiscard]] bool has_string_field(
-        const J::token &body,
-        const std::string &field)
+        const J::Json &body,
+        std::string_view field)
     {
       return body.is_object() &&
-             body.contains(field) &&
-             body[field].is_string();
+             body.contains(std::string(field)) &&
+             body.at(std::string(field)).is_string();
     }
 
     [[nodiscard]] std::string string_field_or_empty(
-        const J::token &body,
-        const std::string &field)
+        const J::Json &body,
+        std::string_view field)
     {
-      if (!has_string_field(body, field))
-      {
-        return {};
-      }
-
-      return body[field].as_string_or("");
+      return J::get_or<std::string>(
+          body,
+          field,
+          "");
     }
 
     [[nodiscard]] int int_query_or(
@@ -66,35 +65,32 @@ namespace softadastra::cloud::modules::events
     }
 
     [[nodiscard]] std::string payload_to_string(
-        const J::token &body)
+        const J::Json &body)
     {
-      if (!body.is_object() ||
-          !body.contains("payload"))
+      if (!body.is_object())
       {
         return {};
       }
 
-      const auto &payload = body["payload"];
+      const J::Json *payload = J::ptr(body, "payload");
 
-      if (payload.is_string())
-      {
-        return payload.as_string_or("");
-      }
-
-      try
-      {
-        return payload.dump();
-      }
-      catch (...)
+      if (payload == nullptr)
       {
         return {};
       }
+
+      if (payload->is_string())
+      {
+        return payload->get<std::string>();
+      }
+
+      return payload->dump();
     }
 
-    [[nodiscard]] J::token event_to_json(
+    [[nodiscard]] J::OrderedJson event_to_json(
         const Event &event)
     {
-      return J::obj({
+      return J::o(
           "id",
           event.public_id,
           "run_id",
@@ -108,22 +104,20 @@ namespace softadastra::cloud::modules::events
           "payload",
           event.payload,
           "created_at",
-          event.created_at,
-      });
+          event.created_at);
     }
 
-    [[nodiscard]] J::token events_to_json(
+    [[nodiscard]] J::Json events_to_json(
         const std::vector<Event> &events)
     {
-      std::vector<J::token> items;
-      items.reserve(events.size());
+      J::Json items = J::Json::array();
 
       for (const auto &event : events)
       {
-        items.push_back(event_to_json(event));
+        items.push_back(J::Json(event_to_json(event)));
       }
 
-      return J::array(std::move(items));
+      return items;
     }
 
     void respond_event_result(
@@ -165,7 +159,7 @@ namespace softadastra::cloud::modules::events
       softadastra::cloud::http::JsonResponse::data(
           res,
           result.message,
-          J::obj({
+          J::o(
               "count",
               static_cast<long long>(result.events.size()),
               "total",
@@ -175,8 +169,7 @@ namespace softadastra::cloud::modules::events
               "offset",
               result.offset,
               "items",
-              events_to_json(result.events),
-          }));
+              events_to_json(result.events)));
     }
   }
 
@@ -190,7 +183,7 @@ namespace softadastra::cloud::modules::events
       const std::string run_id =
           req.param("id", "");
 
-      const auto &body = req.json();
+      const J::Json &body = req.json();
 
       if (!body.is_object())
       {

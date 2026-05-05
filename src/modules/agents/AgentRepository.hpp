@@ -168,7 +168,7 @@ namespace softadastra::cloud::modules::agents
     std::shared_ptr<vix::db::Database> database_;
 
     [[nodiscard]] static Agent agent_from_current_row(
-        const vix::db::Row &row);
+        const vix::db::ResultRow &row);
 
     [[nodiscard]] static int normalize_limit(int limit) noexcept;
     [[nodiscard]] static int normalize_offset(int offset) noexcept;

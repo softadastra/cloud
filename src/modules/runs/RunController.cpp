@@ -9,6 +9,8 @@
 #include <string>
 #include <vector>
 
+#include <vix/json/convert.hpp>
+#include <vix/json/json.hpp>
 #include <vix/log/Log.hpp>
 
 #include "http/JsonResponse.hpp"
@@ -22,24 +24,22 @@ namespace softadastra::cloud::modules::runs
   namespace
   {
     [[nodiscard]] bool has_string_field(
-        const J::token &body,
-        const std::string &field)
+        const J::Json &body,
+        std::string_view field)
     {
       return body.is_object() &&
-             body.contains(field) &&
-             body[field].is_string();
+             body.contains(std::string(field)) &&
+             body.at(std::string(field)).is_string();
     }
 
     [[nodiscard]] std::string string_field_or_empty(
-        const J::token &body,
-        const std::string &field)
+        const J::Json &body,
+        std::string_view field)
     {
-      if (!has_string_field(body, field))
-      {
-        return {};
-      }
-
-      return body[field].as_string_or("");
+      return J::get_or<std::string>(
+          body,
+          field,
+          "");
     }
 
     [[nodiscard]] int int_query_or(
@@ -93,10 +93,10 @@ namespace softadastra::cloud::modules::runs
       return context->project_public_id;
     }
 
-    [[nodiscard]] J::token run_to_json(
+    [[nodiscard]] J::OrderedJson run_to_json(
         const Run &run)
     {
-      return J::obj({
+      return J::o(
           "id",
           run.public_id,
           "project_id",
@@ -118,22 +118,20 @@ namespace softadastra::cloud::modules::runs
           "created_at",
           run.created_at,
           "updated_at",
-          run.updated_at,
-      });
+          run.updated_at);
     }
 
-    [[nodiscard]] J::token runs_to_json(
+    [[nodiscard]] J::Json runs_to_json(
         const std::vector<Run> &runs)
     {
-      std::vector<J::token> items;
-      items.reserve(runs.size());
+      J::Json items = J::Json::array();
 
       for (const auto &run : runs)
       {
-        items.push_back(run_to_json(run));
+        items.push_back(J::Json(run_to_json(run)));
       }
 
-      return J::array(std::move(items));
+      return items;
     }
 
     void respond_run_result(
@@ -165,7 +163,7 @@ namespace softadastra::cloud::modules::runs
   {
     try
     {
-      const auto &body = req.json();
+      const J::Json &body = req.json();
 
       if (!body.is_object())
       {
@@ -303,7 +301,7 @@ namespace softadastra::cloud::modules::runs
       softadastra::cloud::http::JsonResponse::data(
           res,
           result.message,
-          J::obj({
+          J::o(
               "count",
               static_cast<long long>(result.runs.size()),
               "total",
@@ -313,8 +311,7 @@ namespace softadastra::cloud::modules::runs
               "offset",
               result.offset,
               "items",
-              runs_to_json(result.runs),
-          }));
+              runs_to_json(result.runs)));
     }
     catch (const std::exception &e)
     {
@@ -365,7 +362,7 @@ namespace softadastra::cloud::modules::runs
       const std::string run_id =
           req.param("id", "");
 
-      const auto &body = req.json();
+      const J::Json &body = req.json();
 
       if (!body.is_object())
       {
@@ -409,7 +406,7 @@ namespace softadastra::cloud::modules::runs
       const std::string run_id =
           req.param("id", "");
 
-      const auto &body = req.json();
+      const J::Json &body = req.json();
 
       std::string status = "finished";
 
@@ -473,12 +470,11 @@ namespace softadastra::cloud::modules::runs
       softadastra::cloud::http::JsonResponse::data(
           res,
           result.message,
-          J::obj({
+          J::o(
               "id",
               result.run.public_id,
               "deleted",
-              true,
-          }));
+              true));
     }
     catch (const std::exception &e)
     {
