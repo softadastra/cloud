@@ -1,0 +1,50 @@
+{
+  "dependencies": [
+    {
+      "commit": "c7406e0cc5b16e60acb8dfcfd8b33fa249551e18",
+      "hash": "600d0c5fe8589c23afa64d185669b912dbf6fb7373299cfb137e27170f84555e",
+      "id": "rix/auth",
+      "repo": "https://github.com/rixcpp/auth",
+      "requested": "0.3.0",
+      "tag": "v0.3.0",
+      "version": "0.3.0"
+    },
+    {
+      "commit": "e5e7f817a37d815c61962e6be88259f105d4f54d",
+      "hash": "37024ad20348ab31dfbfb88a0ba6c6ab784bed333bd86213a0a95ea0280fe118",
+      "id": "rix/csv",
+      "repo": "https://github.com/rixcpp/csv",
+      "requested": "0.3.1",
+      "tag": "v0.3.1",
+      "version": "0.3.1"
+    },
+    {
+      "commit": "7ce988db8e20a1d0bcedda81dcb88e4daf01c8a7",
+      "hash": "e3dd28f2387f2828ea53326af3e977b4ed844c7c031f7cfbcf30101370b91859",
+      "id": "rix/debug",
+      "repo": "https://github.com/rixcpp/debug",
+      "requested": "0.2.0",
+      "tag": "v0.2.0",
+      "version": "0.2.0"
+    },
+    {
+      "commit": "c7c56efc6a04f285f05c52849186680aa7f342e7",
+      "hash": "e286986e49388957c6627c76c41055b356ad41d381cc7401a68fa9b4695a96af",
+      "id": "rix/pdf",
+      "repo": "https://github.com/rixcpp/pdf",
+      "requested": "0.1.0",
+      "tag": "v0.1.0",
+      "version": "0.1.0"
+    },
+    {
+      "commit": "9362345a98e2828448d9c8899f0c51d4fd3cbe55",
+      "hash": "8bc7be9128249e13e650c392c42bdcd97b1cfecef8698270c9a9cb30ad714fa6",
+      "id": "rix/rix",
+      "repo": "https://github.com/rixcpp/rix",
+      "requested": "0.9.1",
+      "tag": "v0.9.1",
+      "version": "0.9.1"
+    }
+  ],
+  "lockVersion": 1
+}
