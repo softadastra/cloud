@@ -1,3 +1,39 @@
+# Build outputs
+build/
+bin/
+.vix/
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+compile_commands.json
+
+# Runtime config
+.env
+.env.*
+!.env.example
+
+# Runtime storage
+storage/*
+!storage/.gitkeep
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*.swo
+*~
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
 /build*/
 out/
 .vscode/
@@ -15,11 +51,5 @@ CMakeFiles/
 CMakeCache.txt
 cmake-build-*/
 cmd.md
-.vix/
-# Build artifacts
-build/
-install/
-smoke/
-smoke-umbrella/
-smoke-module/
-.env
+
+

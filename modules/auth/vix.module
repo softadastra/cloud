@@ -1,0 +1,15 @@
+name = "auth"
+kind = "service"
+
+[routes]
+prefix = "/api/auth"
+
+[deps]
+registry = [
+]
+
+links = [
+]
+
+[tests]
+enabled = true

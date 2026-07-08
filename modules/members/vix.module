@@ -1,0 +1,15 @@
+name = "members"
+kind = "service"
+
+[routes]
+prefix = "/api/members"
+
+[deps]
+registry = [
+]
+
+links = [
+]
+
+[tests]
+enabled = true

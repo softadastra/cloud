@@ -1,0 +1,15 @@
+name = "package_versions"
+kind = "service"
+
+[routes]
+prefix = "/api/package_versions"
+
+[deps]
+registry = [
+]
+
+links = [
+]
+
+[tests]
+enabled = true

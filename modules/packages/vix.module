@@ -1,0 +1,15 @@
+name = "packages"
+kind = "service"
+
+[routes]
+prefix = "/api/packages"
+
+[deps]
+registry = [
+]
+
+links = [
+]
+
+[tests]
+enabled = true

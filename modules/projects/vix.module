@@ -1,0 +1,15 @@
+name = "projects"
+kind = "service"
+
+[routes]
+prefix = "/api/projects"
+
+[deps]
+registry = [
+]
+
+links = [
+]
+
+[tests]
+enabled = true

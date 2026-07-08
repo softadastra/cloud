@@ -1,0 +1,15 @@
+name = "lockfiles"
+kind = "service"
+
+[routes]
+prefix = "/api/lockfiles"
+
+[deps]
+registry = [
+]
+
+links = [
+]
+
+[tests]
+enabled = true
