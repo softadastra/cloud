@@ -19,6 +19,7 @@ target_compile_features(cloud_projects PUBLIC cxx_std_20)
 target_link_libraries(cloud_projects
   PUBLIC
     vix::vix
+    cloud_auth
 )
 
 if(DEFINED VIX_MODULE_projects_LINKS)
@@ -45,6 +46,7 @@ if(DEFINED cloud_BUILD_TESTS AND cloud_BUILD_TESTS)
 
     target_link_libraries(cloud_projects_tests PRIVATE
       cloud_projects
+      cloud_auth
       vix::vix
     )
 

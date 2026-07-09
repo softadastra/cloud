@@ -17,6 +17,7 @@
 #include <projects/dto/ProjectRequests.hpp>
 #include <projects/services/ProjectService.hpp>
 #include <projects/support/ProjectErrors.hpp>
+#include <auth/middleware/AuthMiddleware.hpp>
 
 #include <string>
 #include <vector>
@@ -128,6 +129,8 @@ namespace cloud::projects::controllers
     {
       return {
           body.value("workspace_id", ""),
+          "",
+          "",
       };
     }
 
@@ -188,7 +191,12 @@ namespace cloud::projects::controllers
         return;
       }
 
-      const auto request = read_list_projects_request(body);
+      auto request = read_list_projects_request(body);
+      if (auto *ctx = req.try_state<cloud::auth::middleware::AuthContext>())
+      {
+        request.access_scope = ctx->access_scope;
+        request.project_ids_json = ctx->project_ids_json;
+      }
       auto projects = project_service().list_projects(request);
 
       if (projects.failed())

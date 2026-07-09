@@ -12,6 +12,8 @@ namespace cloud::workspace_invites::dto
     std::string invited_email;
     std::string role;
     std::string invited_by_user_id;
+    std::string access_scope;
+    std::string project_ids_json;
     std::int64_t expires_at{0};
   };
 

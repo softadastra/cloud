@@ -502,14 +502,30 @@ namespace cloud::projects::services
 
     if (impl_->persistent())
     {
-      auto rows = impl_->db->query(
-          "SELECT id, workspace_id, owner_user_id, name, slug, description, repository_url, default_branch, active, created_at, updated_at "
-          "FROM projects WHERE workspace_id = ? ORDER BY created_at",
-          request.workspace_id);
-
-      while (rows->next())
+      if (request.access_scope == "selected_projects")
       {
-        projects.push_back(impl_->row_to_project(rows->row()));
+        auto rows = impl_->db->query(
+            "SELECT id, workspace_id, owner_user_id, name, slug, description, repository_url, default_branch, active, created_at, updated_at "
+            "FROM projects WHERE workspace_id = ? AND instr(?, char(34) || id || char(34)) > 0 ORDER BY created_at",
+            request.workspace_id,
+            request.project_ids_json);
+
+        while (rows->next())
+        {
+          projects.push_back(impl_->row_to_project(rows->row()));
+        }
+      }
+      else
+      {
+        auto rows = impl_->db->query(
+            "SELECT id, workspace_id, owner_user_id, name, slug, description, repository_url, default_branch, active, created_at, updated_at "
+            "FROM projects WHERE workspace_id = ? ORDER BY created_at",
+            request.workspace_id);
+
+        while (rows->next())
+        {
+          projects.push_back(impl_->row_to_project(rows->row()));
+        }
       }
 
       return ProjectResult<std::vector<dto::ProjectResponse>>::success(projects);

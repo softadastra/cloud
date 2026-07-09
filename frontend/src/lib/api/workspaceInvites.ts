@@ -6,12 +6,16 @@ export function createWorkspaceInvite(input: {
   invitedEmail: string;
   role: string;
   invitedByUserId: string;
+  accessScope?: string;
+  projectIdsJson?: string;
 }) {
   return api.post<{ invite: WorkspaceInvite }>('/api/workspace_invites/create', {
     workspace_id: input.workspaceId,
     invited_email: input.invitedEmail,
     role: input.role,
-    invited_by_user_id: input.invitedByUserId
+    invited_by_user_id: input.invitedByUserId,
+    access_scope: input.accessScope ?? 'entire_workspace',
+    project_ids_json: input.projectIdsJson ?? '' 
   });
 }
 

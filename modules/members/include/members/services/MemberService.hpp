@@ -93,6 +93,10 @@ namespace cloud::members::services
     MemberResult<dto::MemberResponse> remove_member(
         const dto::RemoveMemberRequest &request);
 
+    MemberResult<dto::MemberResponse> update_member_status(
+        const dto::MemberLifecycleRequest &request,
+        const std::string &status);
+
     MemberResult<std::vector<dto::MemberResponse>> list_members(
         const dto::ListMembersRequest &request) const;
 

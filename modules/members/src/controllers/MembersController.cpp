@@ -95,6 +95,8 @@ namespace cloud::members::controllers
           body.value("email", ""),
           body.value("role", ""),
           body.value("invited_by_user_id", ""),
+          body.value("access_scope", ""),
+          body.value("project_ids_json", ""),
       };
     }
 
@@ -105,6 +107,7 @@ namespace cloud::members::controllers
           body.value("workspace_id", ""),
           body.value("user_id", ""),
           body.value("role", ""),
+          body.value("actor_user_id", ""),
       };
     }
 
@@ -114,6 +117,7 @@ namespace cloud::members::controllers
       return {
           body.value("workspace_id", ""),
           body.value("user_id", ""),
+          body.value("actor_user_id", ""),
       };
     }
 
@@ -218,6 +222,46 @@ namespace cloud::members::controllers
           res,
           vix::json::o(
               "member", updated.value().to_json())); });
+
+
+    app.post("/api/members/update_role", [](vix::Request &req, vix::Response &res)
+             {
+      const auto &body = req.json();
+
+      if (!require_json_object(body, res))
+      {
+        return;
+      }
+
+      const auto request = read_update_member_role_request(body);
+      auto updated = member_service().update_member_role(request);
+
+      if (updated.failed())
+      {
+        support::write_member_error(res, updated.error());
+        return;
+      }
+
+      json_ok(
+          res,
+          vix::json::o(
+              "member", updated.value().to_json())); });
+
+    app.post("/api/members/suspend", [](vix::Request &req, vix::Response &res)
+             {
+      const auto &body = req.json();
+      if (!require_json_object(body, res)) return;
+      auto updated = member_service().update_member_status(read_remove_member_request(body), "suspended");
+      if (updated.failed()) { support::write_member_error(res, updated.error()); return; }
+      json_ok(res, vix::json::o("member", updated.value().to_json())); });
+
+    app.post("/api/members/reactivate", [](vix::Request &req, vix::Response &res)
+             {
+      const auto &body = req.json();
+      if (!require_json_object(body, res)) return;
+      auto updated = member_service().update_member_status(read_remove_member_request(body), "active");
+      if (updated.failed()) { support::write_member_error(res, updated.error()); return; }
+      json_ok(res, vix::json::o("member", updated.value().to_json())); });
 
     app.post("/api/members/remove", [](vix::Request &req, vix::Response &res)
              {

@@ -29,6 +29,9 @@ namespace cloud::workspaces::dto
     std::string slug;
     std::string owner_user_id;
     std::string current_user_role;
+    std::string current_user_status;
+    std::string access_scope;
+    std::string project_ids_json;
     bool current_user_is_owner{false};
     bool active{true};
     std::int64_t created_at{0};
@@ -42,6 +45,9 @@ namespace cloud::workspaces::dto
           "slug", slug,
           "owner_user_id", owner_user_id,
           "current_user_role", current_user_role,
+          "current_user_status", current_user_status,
+          "access_scope", access_scope,
+          "project_ids_json", project_ids_json,
           "current_user_is_owner", current_user_is_owner,
           "active", active,
           "created_at", created_at,

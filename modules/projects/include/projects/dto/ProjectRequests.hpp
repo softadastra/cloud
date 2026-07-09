@@ -50,6 +50,8 @@ namespace cloud::projects::dto
   struct ListProjectsRequest
   {
     std::string workspace_id;
+    std::string access_scope;
+    std::string project_ids_json;
   };
 } // namespace cloud::projects::dto
 

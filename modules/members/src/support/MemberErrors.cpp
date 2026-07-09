@@ -28,6 +28,7 @@ namespace cloud::members::support
     case MemberErrorCode::MissingUser:
     case MemberErrorCode::MissingEmail:
     case MemberErrorCode::InvalidRole:
+    case MemberErrorCode::InvalidStatus:
       return 400;
 
     case MemberErrorCode::Unauthorized:
@@ -39,6 +40,11 @@ namespace cloud::members::support
 
     case MemberErrorCode::MemberAlreadyExists:
       return 409;
+
+    case MemberErrorCode::CannotModifyOwner:
+    case MemberErrorCode::CannotRemoveOwner:
+    case MemberErrorCode::PermissionDenied:
+      return 403;
 
     case MemberErrorCode::InternalError:
     default:
@@ -66,6 +72,9 @@ namespace cloud::members::support
     case MemberErrorCode::InvalidRole:
       return "invalid_member_role";
 
+    case MemberErrorCode::InvalidStatus:
+      return "invalid_member_status";
+
     case MemberErrorCode::Unauthorized:
       return "unauthorized";
 
@@ -77,6 +86,15 @@ namespace cloud::members::support
 
     case MemberErrorCode::MemberAlreadyExists:
       return "workspace_member_already_exists";
+
+    case MemberErrorCode::CannotModifyOwner:
+      return "cannot_modify_owner";
+
+    case MemberErrorCode::CannotRemoveOwner:
+      return "cannot_remove_owner";
+
+    case MemberErrorCode::PermissionDenied:
+      return "permission_denied";
 
     case MemberErrorCode::InternalError:
     default:
@@ -109,6 +127,9 @@ namespace cloud::members::support
     case MemberErrorCode::InvalidRole:
       return "Invalid member role.";
 
+    case MemberErrorCode::InvalidStatus:
+      return "Invalid member status.";
+
     case MemberErrorCode::Unauthorized:
       return "Authentication is required.";
 
@@ -120,6 +141,15 @@ namespace cloud::members::support
 
     case MemberErrorCode::MemberAlreadyExists:
       return "Workspace member already exists.";
+
+    case MemberErrorCode::CannotModifyOwner:
+      return "Cannot modify workspace owner.";
+
+    case MemberErrorCode::CannotRemoveOwner:
+      return "Cannot remove workspace owner.";
+
+    case MemberErrorCode::PermissionDenied:
+      return "Permission denied.";
 
     case MemberErrorCode::InternalError:
     default:

@@ -153,6 +153,9 @@ namespace cloud::workspaces::services
     {
       auto workspace = row_to_workspace(row);
       workspace.current_user_role = row.getString(7);
+      workspace.current_user_status = row.getString(8);
+      workspace.access_scope = row.getString(9);
+      workspace.project_ids_json = row.getString(10);
       workspace.current_user_is_owner = workspace.current_user_role == "owner";
       return workspace;
     }
@@ -421,11 +424,17 @@ namespace cloud::workspaces::services
     {
       auto rows = impl_->db->query(
           "SELECT DISTINCT w.id, w.owner_user_id, w.name, w.slug, w.active, w.created_at, w.updated_at, "
-          "CASE WHEN w.owner_user_id = ? THEN 'owner' ELSE COALESCE(wm.role, 'viewer') END AS current_user_role "
+          "CASE WHEN w.owner_user_id = ? THEN 'owner' ELSE COALESCE(wm.role, 'viewer') END AS current_user_role, "
+          "CASE WHEN w.owner_user_id = ? THEN 'active' ELSE COALESCE(wm.status, 'active') END AS current_user_status, "
+          "CASE WHEN w.owner_user_id = ? THEN 'entire_workspace' ELSE COALESCE(wm.access_scope, 'entire_workspace') END AS access_scope, "
+          "CASE WHEN w.owner_user_id = ? THEN '' ELSE COALESCE(wm.project_ids_json, '') END AS project_ids_json "
           "FROM workspaces w "
-          "LEFT JOIN workspace_members wm ON wm.workspace_id = w.id AND wm.active = 1 "
+          "LEFT JOIN workspace_members wm ON wm.workspace_id = w.id AND wm.active = 1 AND wm.status = 'active' "
           "WHERE w.owner_user_id = ? OR wm.user_id = ? "
           "ORDER BY w.created_at",
+          owner_user_id,
+          owner_user_id,
+          owner_user_id,
           owner_user_id,
           owner_user_id,
           owner_user_id);
@@ -444,6 +453,9 @@ namespace cloud::workspaces::services
       {
         auto workspace = entry.second;
         workspace.current_user_role = "owner";
+        workspace.current_user_status = "active";
+        workspace.access_scope = "entire_workspace";
+        workspace.project_ids_json = "";
         workspace.current_user_is_owner = true;
         workspaces.push_back(workspace);
       }

@@ -214,11 +214,58 @@ namespace cloud::auth::middleware
       return {};
     }
 
+    std::string project_id_from_request(
+        const vix::Request &req)
+    {
+      if (req.has_param("project_id"))
+      {
+        return req.param("project_id");
+      }
+
+      if (req.has_query("project_id"))
+      {
+        return req.query_value("project_id");
+      }
+
+      auto project_id = json_value(req, "project_id");
+
+      if (!project_id.empty())
+      {
+        return project_id;
+      }
+
+      if (starts_with(req.path(), "/api/projects/show") ||
+          starts_with(req.path(), "/api/projects/update"))
+      {
+        return json_value(req, "id");
+      }
+
+      return {};
+    }
+
+    bool project_allowed_by_scope(
+        const AuthContext &ctx,
+        const std::string &project_id)
+    {
+      if (project_id.empty() || ctx.access_scope != "selected_projects")
+      {
+        return true;
+      }
+
+      return ctx.project_ids_json.find("\"" + project_id + "\"") != std::string::npos ||
+             ctx.project_ids_json.find(project_id) != std::string::npos;
+    }
+
     std::string actor_user_id_from_request(
         const vix::Request &req)
     {
       if (starts_with(req.path(), "/api/members"))
       {
+        auto actor_user_id = json_value(req, "actor_user_id");
+        if (!actor_user_id.empty())
+        {
+          return actor_user_id;
+        }
         return json_value(req, "invited_by_user_id");
       }
 
@@ -307,11 +354,11 @@ namespace cloud::auth::middleware
       return role == "admin" || role == "member";
     }
 
-    bool workspace_owner_or_member_role(
+    bool workspace_owner_or_member_context(
         vix::db::Database &db,
         const std::string &workspace_id,
         const std::string &user_id,
-        std::string &role)
+        AuthContext &ctx)
     {
       auto owner = db.query(
           "SELECT id FROM workspaces WHERE id = ? AND owner_user_id = ? LIMIT 1",
@@ -320,12 +367,16 @@ namespace cloud::auth::middleware
 
       if (owner->next())
       {
-        role = "owner";
+        ctx.role = "owner";
+        ctx.status = "active";
+        ctx.access_scope = "entire_workspace";
+        ctx.project_ids_json = "";
         return true;
       }
 
       auto member = db.query(
-          "SELECT role FROM workspace_members WHERE workspace_id = ? AND user_id = ? AND active = 1 LIMIT 1",
+          "SELECT role, status, COALESCE(access_scope, 'entire_workspace'), COALESCE(project_ids_json, '') "
+          "FROM workspace_members WHERE workspace_id = ? AND user_id = ? AND active = 1 AND status = 'active' LIMIT 1",
           workspace_id,
           user_id);
 
@@ -334,7 +385,10 @@ namespace cloud::auth::middleware
         return false;
       }
 
-      role = member->row().getString(0);
+      ctx.role = member->row().getString(0);
+      ctx.status = member->row().getString(1);
+      ctx.access_scope = member->row().getString(2);
+      ctx.project_ids_json = member->row().getString(3);
       return true;
     }
 
@@ -365,6 +419,8 @@ namespace cloud::auth::middleware
       ctx.user_id = rows->row().getString(0);
       ctx.workspace_id = rows->row().getString(1);
       ctx.role = "member";
+      ctx.status = "active";
+      ctx.access_scope = "entire_workspace";
       ctx.cli_token = true;
 
       db->exec(
@@ -478,21 +534,33 @@ namespace cloud::auth::middleware
     if (!ctx.cli_token)
     {
       auto db = make_database();
-      std::string role;
-
-      if (!workspace_owner_or_member_role(*db, workspace_id, ctx.user_id, role))
+      if (!workspace_owner_or_member_context(*db, workspace_id, ctx.user_id, ctx))
       {
         json_error(res, 403, "forbidden", "User does not belong to this workspace.");
         return false;
       }
 
       ctx.workspace_id = workspace_id;
-      ctx.role = role;
     }
 
     if (!role_allows(ctx.role, req))
     {
       json_error(res, 403, "forbidden", "User role does not allow this action.");
+      return false;
+    }
+
+    const auto project_id = project_id_from_request(req);
+    if (!project_allowed_by_scope(ctx, project_id))
+    {
+      json_error(res, 403, "forbidden", "User does not have access to this project.");
+      return false;
+    }
+
+    if (ctx.access_scope == "selected_projects" &&
+        starts_with(req.path(), "/api/projects") &&
+        !action_is_read(req))
+    {
+      json_error(res, 403, "forbidden", "Selected project access cannot create or modify projects.");
       return false;
     }
 

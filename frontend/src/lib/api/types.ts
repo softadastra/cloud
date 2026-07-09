@@ -58,6 +58,9 @@ export type Workspace = {
   slug: string;
   owner_user_id: string;
   current_user_role?: 'owner' | 'admin' | 'member' | 'viewer' | string;
+  current_user_status?: 'active' | 'suspended' | 'removed' | string;
+  access_scope?: 'entire_workspace' | 'selected_projects' | string;
+  project_ids_json?: string;
   current_user_is_owner?: boolean;
   active: boolean;
   created_at: number;
@@ -84,7 +87,9 @@ export type Member = {
   user_id: string;
   email: string;
   role: 'owner' | 'admin' | 'member' | 'viewer' | string;
-  status: string;
+  status: 'active' | 'suspended' | 'removed' | string;
+  access_scope?: 'entire_workspace' | 'selected_projects' | string;
+  project_ids_json?: string;
   invited_by_user_id: string;
   created_at: number;
   updated_at: number;
@@ -127,6 +132,8 @@ export type PackageVersion = {
   manifest_json: string;
   size_bytes: number;
   status: string;
+  access_scope?: 'entire_workspace' | 'selected_projects' | string;
+  project_ids_json?: string;
   created_at: number;
   updated_at: number;
 };
@@ -171,6 +178,8 @@ export type WorkspaceInvite = {
   role: string;
   invited_by_user_id: string;
   status: string;
+  access_scope?: 'entire_workspace' | 'selected_projects' | string;
+  project_ids_json?: string;
   created_at: number;
   updated_at: number;
   expires_at: number;

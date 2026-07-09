@@ -26,6 +26,8 @@ namespace cloud::members::dto
     std::string email;
     std::string role;
     std::string invited_by_user_id;
+    std::string access_scope;
+    std::string project_ids_json;
   };
 
   struct UpdateMemberRoleRequest
@@ -33,13 +35,17 @@ namespace cloud::members::dto
     std::string workspace_id;
     std::string user_id;
     std::string role;
+    std::string actor_user_id;
   };
 
-  struct RemoveMemberRequest
+  struct MemberLifecycleRequest
   {
     std::string workspace_id;
     std::string user_id;
+    std::string actor_user_id;
   };
+
+  using RemoveMemberRequest = MemberLifecycleRequest;
 
   struct ListMembersRequest
   {

@@ -30,6 +30,8 @@ namespace cloud::members::dto
     std::string email;
     std::string role;
     std::string status;
+    std::string access_scope;
+    std::string project_ids_json;
     std::string invited_by_user_id;
     std::int64_t created_at{0};
     std::int64_t updated_at{0};
@@ -43,6 +45,8 @@ namespace cloud::members::dto
           "email", email,
           "role", role,
           "status", status,
+          "access_scope", access_scope,
+          "project_ids_json", project_ids_json,
           "invited_by_user_id", invited_by_user_id,
           "created_at", created_at,
           "updated_at", updated_at);

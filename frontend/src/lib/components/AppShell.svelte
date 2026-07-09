@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import AccessScopeBadge from '$lib/components/AccessScopeBadge.svelte';
   import RoleBadge from '$lib/components/RoleBadge.svelte';
   import { auth } from '$lib/stores/auth';
   import { workspaceContext } from '$lib/stores/workspace';
@@ -50,7 +51,7 @@
           </select>
         </label>
         {#if $workspaceContext.selectedWorkspace}
-          <p class="context-line compact">Your role: <RoleBadge role={$workspaceContext.selectedWorkspace.current_user_role} /></p>
+          <p class="context-line compact">Role: <RoleBadge role={$workspaceContext.selectedWorkspace.current_user_role} /> Access: <AccessScopeBadge scope={$workspaceContext.selectedWorkspace.access_scope} /></p>
         {/if}
       {/if}
 

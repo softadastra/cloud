@@ -41,6 +41,21 @@ namespace cloud::workspace_invites::services
     {
       return role.empty() ? "member" : role;
     }
+
+    bool valid_access_scope(const std::string &scope)
+    {
+      return scope == "entire_workspace" || scope == "selected_projects";
+    }
+
+    std::string normalize_access_scope(const std::string &scope)
+    {
+      return scope.empty() ? "entire_workspace" : scope;
+    }
+
+    bool selected_projects_empty(const std::string &project_ids_json)
+    {
+      return project_ids_json.empty() || project_ids_json == "[]";
+    }
   }
 
   class WorkspaceInviteService::Impl
@@ -69,9 +84,11 @@ namespace cloud::workspace_invites::services
       invite.role = row.getString(5);
       invite.invited_by_user_id = row.getString(6);
       invite.status = row.getString(7);
-      invite.created_at = row.getInt64(8);
-      invite.updated_at = row.getInt64(9);
-      invite.expires_at = row.getInt64(10);
+      invite.access_scope = row.getString(8);
+      invite.project_ids_json = row.getString(9);
+      invite.created_at = row.getInt64(10);
+      invite.updated_at = row.getInt64(11);
+      invite.expires_at = row.getInt64(12);
       return invite;
     }
 
@@ -92,6 +109,36 @@ namespace cloud::workspace_invites::services
       }
 
       return WorkspaceInviteResult<std::string>::success(rows->row().getString(0));
+    }
+
+    bool project_ids_belong_to_workspace(const std::string &workspace_id, const std::string &project_ids_json) const
+    {
+      if (selected_projects_empty(project_ids_json))
+      {
+        return false;
+      }
+
+      auto rows = db->query("SELECT id FROM projects WHERE workspace_id = ?", workspace_id);
+      std::string known;
+      while (rows->next())
+      {
+        known += "\"" + rows->row().getString(0) + "\"";
+      }
+
+      std::size_t pos = 0;
+      while ((pos = project_ids_json.find("project_", pos)) != std::string::npos)
+      {
+        auto end = project_ids_json.find('"', pos);
+        if (end == std::string::npos) end = project_ids_json.find(',', pos);
+        const auto project_id = project_ids_json.substr(pos, end == std::string::npos ? std::string::npos : end - pos);
+        if (known.find("\"" + project_id + "\"") == std::string::npos)
+        {
+          return false;
+        }
+        pos += project_id.size();
+      }
+
+      return true;
     }
 
     bool active_member_exists(const std::string &workspace_id, const std::string &user_id) const
@@ -116,7 +163,7 @@ namespace cloud::workspace_invites::services
     {
       auto rows = db->query(
           "SELECT wi.id, wi.workspace_id, COALESCE(w.name, ''), wi.invited_email, COALESCE(wi.invited_user_id, ''), "
-          "wi.role, wi.invited_by_user_id, wi.status, wi.created_at, wi.updated_at, COALESCE(wi.expires_at, 0) "
+          "wi.role, wi.invited_by_user_id, wi.status, COALESCE(wi.access_scope, 'entire_workspace'), COALESCE(wi.project_ids_json, ''), wi.created_at, wi.updated_at, COALESCE(wi.expires_at, 0) "
           "FROM workspace_invites wi LEFT JOIN workspaces w ON w.id = wi.workspace_id WHERE wi.id = ? LIMIT 1",
           invite_id);
 
@@ -134,8 +181,8 @@ namespace cloud::workspace_invites::services
       const auto timestamp = now_timestamp();
       db->exec(
           "INSERT INTO workspace_members "
-          "(id, workspace_id, user_id, email, role, status, active, invited_by_user_id, joined_at, created_at, updated_at) "
-          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          "(id, workspace_id, user_id, email, role, status, active, access_scope, project_ids_json, invited_by_user_id, joined_at, created_at, updated_at) "
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
           "member_" + invite.id,
           invite.workspace_id,
           user_id,
@@ -143,6 +190,8 @@ namespace cloud::workspace_invites::services
           invite.role,
           "active",
           static_cast<std::int64_t>(1),
+          invite.access_scope,
+          invite.project_ids_json,
           invite.invited_by_user_id,
           timestamp,
           timestamp,
@@ -184,6 +233,18 @@ namespace cloud::workspace_invites::services
                                                                            "Member role must be admin, member or viewer."});
     }
 
+    const auto access_scope = normalize_access_scope(request.access_scope);
+    if (!valid_access_scope(access_scope))
+    {
+      return WorkspaceInviteResult<dto::WorkspaceInviteResponse>::failure({support::WorkspaceInviteErrorCode::InvalidRequest,
+                                                                           "Access scope must be entire_workspace or selected_projects."});
+    }
+    if (access_scope == "selected_projects" && selected_projects_empty(request.project_ids_json))
+    {
+      return WorkspaceInviteResult<dto::WorkspaceInviteResponse>::failure({support::WorkspaceInviteErrorCode::InvalidRequest,
+                                                                           "Selected projects access requires at least one project."});
+    }
+
     const auto timestamp = now_timestamp();
 
     if (impl_->persistent())
@@ -200,6 +261,12 @@ namespace cloud::workspace_invites::services
                                                                              "Member already exists in this workspace."});
       }
 
+      if (access_scope == "selected_projects" && !impl_->project_ids_belong_to_workspace(request.workspace_id, request.project_ids_json))
+      {
+        return WorkspaceInviteResult<dto::WorkspaceInviteResponse>::failure({support::WorkspaceInviteErrorCode::InvalidRequest,
+                                                                             "Selected projects must belong to this workspace."});
+      }
+
       if (impl_->pending_invite_exists(request.workspace_id, request.invited_email))
       {
         return WorkspaceInviteResult<dto::WorkspaceInviteResponse>::failure({support::WorkspaceInviteErrorCode::WorkspaceInviteAlreadyExists,
@@ -214,14 +281,16 @@ namespace cloud::workspace_invites::services
       invite.role = role;
       invite.invited_by_user_id = request.invited_by_user_id;
       invite.status = "pending";
+      invite.access_scope = access_scope;
+      invite.project_ids_json = request.project_ids_json;
       invite.created_at = timestamp;
       invite.updated_at = timestamp;
       invite.expires_at = request.expires_at;
 
       impl_->db->exec(
           "INSERT INTO workspace_invites "
-          "(id, workspace_id, invited_email, invited_user_id, role, invited_by_user_id, status, created_at, updated_at, expires_at) "
-          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          "(id, workspace_id, invited_email, invited_user_id, role, invited_by_user_id, status, access_scope, project_ids_json, created_at, updated_at, expires_at) "
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
           invite.id,
           invite.workspace_id,
           invite.invited_email,
@@ -229,6 +298,8 @@ namespace cloud::workspace_invites::services
           invite.role,
           invite.invited_by_user_id,
           invite.status,
+          invite.access_scope,
+          invite.project_ids_json,
           invite.created_at,
           invite.updated_at,
           invite.expires_at);
@@ -244,6 +315,8 @@ namespace cloud::workspace_invites::services
     invite.role = role;
     invite.invited_by_user_id = request.invited_by_user_id;
     invite.status = "pending";
+    invite.access_scope = access_scope;
+    invite.project_ids_json = request.project_ids_json;
     invite.created_at = timestamp;
     invite.updated_at = timestamp;
     invite.expires_at = request.expires_at;
@@ -264,7 +337,7 @@ namespace cloud::workspace_invites::services
     {
       auto rows = impl_->db->query(
           "SELECT wi.id, wi.workspace_id, COALESCE(w.name, ''), wi.invited_email, COALESCE(wi.invited_user_id, ''), "
-          "wi.role, wi.invited_by_user_id, wi.status, wi.created_at, wi.updated_at, COALESCE(wi.expires_at, 0) "
+          "wi.role, wi.invited_by_user_id, wi.status, COALESCE(wi.access_scope, 'entire_workspace'), COALESCE(wi.project_ids_json, ''), wi.created_at, wi.updated_at, COALESCE(wi.expires_at, 0) "
           "FROM workspace_invites wi LEFT JOIN workspaces w ON w.id = wi.workspace_id WHERE wi.workspace_id = ? ORDER BY wi.created_at DESC",
           request.workspace_id);
       while (rows->next())
@@ -297,7 +370,7 @@ namespace cloud::workspace_invites::services
     {
       auto rows = impl_->db->query(
           "SELECT wi.id, wi.workspace_id, COALESCE(w.name, ''), wi.invited_email, COALESCE(wi.invited_user_id, ''), "
-          "wi.role, wi.invited_by_user_id, wi.status, wi.created_at, wi.updated_at, COALESCE(wi.expires_at, 0) "
+          "wi.role, wi.invited_by_user_id, wi.status, COALESCE(wi.access_scope, 'entire_workspace'), COALESCE(wi.project_ids_json, ''), wi.created_at, wi.updated_at, COALESCE(wi.expires_at, 0) "
           "FROM workspace_invites wi LEFT JOIN workspaces w ON w.id = wi.workspace_id "
           "WHERE wi.status = 'pending' AND (wi.invited_user_id = ? OR wi.invited_email = ?) ORDER BY wi.created_at DESC",
           request.user_id,

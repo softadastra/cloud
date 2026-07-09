@@ -74,6 +74,8 @@ namespace cloud::workspace_invites::controllers
       request.invited_email = body.value("invited_email", body.value("email", ""));
       request.role = body.value("role", "");
       request.invited_by_user_id = body.value("invited_by_user_id", "");
+      request.access_scope = body.value("access_scope", "");
+      request.project_ids_json = body.value("project_ids_json", body.value("project_ids", ""));
       request.expires_at = body.value("expires_at", static_cast<std::int64_t>(0));
 
       auto created = workspace_invite_service().create_invite(request);

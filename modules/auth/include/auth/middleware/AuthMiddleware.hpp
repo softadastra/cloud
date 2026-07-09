@@ -27,6 +27,9 @@ namespace cloud::auth::middleware
     std::string user_id;
     std::string workspace_id;
     std::string role;
+    std::string status;
+    std::string access_scope;
+    std::string project_ids_json;
     bool cli_token{false};
   };
 

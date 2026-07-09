@@ -71,6 +71,33 @@ namespace cloud::members::services
       return role;
     }
 
+    bool valid_status(
+        const std::string &status)
+    {
+      return status == "active" ||
+             status == "suspended" ||
+             status == "removed";
+    }
+
+    bool valid_access_scope(
+        const std::string &scope)
+    {
+      return scope == "entire_workspace" ||
+             scope == "selected_projects";
+    }
+
+    std::string normalize_access_scope(
+        const std::string &scope)
+    {
+      return scope.empty() ? "entire_workspace" : scope;
+    }
+
+    bool selected_projects_empty(
+        const std::string &project_ids_json)
+    {
+      return project_ids_json.empty() || project_ids_json == "[]";
+    }
+
     std::string member_key(
         const std::string &workspace_id,
         const std::string &user_id)
@@ -108,9 +135,11 @@ namespace cloud::members::services
       member.email = row.getString(3);
       member.role = row.getString(4);
       member.status = row.getString(5);
-      member.invited_by_user_id = row.getString(6);
-      member.created_at = row.getInt64(7);
-      member.updated_at = row.getInt64(8);
+      member.access_scope = row.getString(6);
+      member.project_ids_json = row.getString(7);
+      member.invited_by_user_id = row.getString(8);
+      member.created_at = row.getInt64(9);
+      member.updated_at = row.getInt64(10);
       return member;
     }
 
@@ -155,14 +184,84 @@ namespace cloud::members::services
       return MemberResult<std::string>::success(rows->row().getString(0));
     }
 
+    bool project_ids_belong_to_workspace(
+        const std::string &workspace_id,
+        const std::string &project_ids_json) const
+    {
+      if (selected_projects_empty(project_ids_json))
+      {
+        return false;
+      }
+
+      auto rows = db->query(
+          "SELECT id FROM projects WHERE workspace_id = ?",
+          workspace_id);
+
+      std::string known;
+      while (rows->next())
+      {
+        known += "\"" + rows->row().getString(0) + "\"";
+      }
+
+      std::size_t pos = 0;
+      while ((pos = project_ids_json.find("project_", pos)) != std::string::npos)
+      {
+        auto end = project_ids_json.find('"', pos);
+        if (end == std::string::npos)
+        {
+          end = project_ids_json.find(',', pos);
+        }
+        const auto project_id = project_ids_json.substr(pos, end == std::string::npos ? std::string::npos : end - pos);
+        if (known.find("\"" + project_id + "\"") == std::string::npos)
+        {
+          return false;
+        }
+        pos += project_id.size();
+      }
+
+      return true;
+    }
+
+    std::string workspace_owner_user_id(
+        const std::string &workspace_id) const
+    {
+      auto rows = db->query(
+          "SELECT owner_user_id FROM workspaces WHERE id = ? LIMIT 1",
+          workspace_id);
+
+      return rows->next() ? rows->row().getString(0) : std::string{};
+    }
+
+    std::string actor_role(
+        const std::string &workspace_id,
+        const std::string &actor_user_id) const
+    {
+      if (actor_user_id.empty())
+      {
+        return {};
+      }
+
+      if (workspace_owner_user_id(workspace_id) == actor_user_id)
+      {
+        return "owner";
+      }
+
+      auto rows = db->query(
+          "SELECT role FROM workspace_members WHERE workspace_id = ? AND user_id = ? AND active = 1 AND status = 'active' LIMIT 1",
+          workspace_id,
+          actor_user_id);
+
+      return rows->next() ? rows->row().getString(0) : std::string{};
+    }
+
     MemberResult<dto::MemberResponse> find_member(
         const std::string &workspace_id,
         const std::string &user_id,
         bool active_only) const
     {
       const auto sql = active_only
-                           ? "SELECT id, workspace_id, user_id, email, role, status, invited_by_user_id, created_at, updated_at FROM workspace_members WHERE workspace_id = ? AND user_id = ? AND active = 1 LIMIT 1"
-                           : "SELECT id, workspace_id, user_id, email, role, status, invited_by_user_id, created_at, updated_at FROM workspace_members WHERE workspace_id = ? AND user_id = ? LIMIT 1";
+                           ? "SELECT id, workspace_id, user_id, email, role, status, COALESCE(access_scope, 'entire_workspace'), COALESCE(project_ids_json, ''), invited_by_user_id, created_at, updated_at FROM workspace_members WHERE workspace_id = ? AND user_id = ? AND active = 1 LIMIT 1"
+                           : "SELECT id, workspace_id, user_id, email, role, status, COALESCE(access_scope, 'entire_workspace'), COALESCE(project_ids_json, ''), invited_by_user_id, created_at, updated_at FROM workspace_members WHERE workspace_id = ? AND user_id = ? LIMIT 1";
 
       auto rows = db->query(sql, workspace_id, user_id);
 
@@ -220,12 +319,33 @@ namespace cloud::members::services
                                                          "Member role must be owner, admin, member or viewer."});
     }
 
+    const auto access_scope = normalize_access_scope(request.access_scope);
+
+    if (!valid_access_scope(access_scope))
+    {
+      return MemberResult<dto::MemberResponse>::failure({support::MemberErrorCode::InvalidRequest,
+                                                         "Access scope must be entire_workspace or selected_projects."});
+    }
+
+    if (access_scope == "selected_projects" && selected_projects_empty(request.project_ids_json))
+    {
+      return MemberResult<dto::MemberResponse>::failure({support::MemberErrorCode::InvalidRequest,
+                                                         "Selected projects access requires at least one project."});
+    }
+
     if (impl_->persistent())
     {
       if (!impl_->workspace_exists(request.workspace_id))
       {
         return MemberResult<dto::MemberResponse>::failure({support::MemberErrorCode::MissingWorkspace,
                                                            "Workspace not found."});
+      }
+
+      if (access_scope == "selected_projects" &&
+          !impl_->project_ids_belong_to_workspace(request.workspace_id, request.project_ids_json))
+      {
+        return MemberResult<dto::MemberResponse>::failure({support::MemberErrorCode::InvalidRequest,
+                                                           "Selected projects must belong to this workspace."});
       }
 
       auto resolved_user_id = impl_->resolve_user_id_for_invite(request);
@@ -252,16 +372,20 @@ namespace cloud::members::services
         member.email = request.email;
         member.role = role;
         member.status = "active";
+        member.access_scope = access_scope;
+        member.project_ids_json = request.project_ids_json;
         member.invited_by_user_id = request.invited_by_user_id;
         member.updated_at = timestamp;
 
         impl_->db->exec(
             "UPDATE workspace_members "
-            "SET email = ?, role = ?, status = ?, active = 1, invited_by_user_id = ?, updated_at = ? "
+            "SET email = ?, role = ?, status = ?, active = 1, access_scope = ?, project_ids_json = ?, invited_by_user_id = ?, updated_at = ? "
             "WHERE workspace_id = ? AND user_id = ?",
             member.email,
             member.role,
             member.status,
+            member.access_scope,
+            member.project_ids_json,
             member.invited_by_user_id,
             member.updated_at,
             member.workspace_id,
@@ -277,14 +401,16 @@ namespace cloud::members::services
       member.email = request.email;
       member.role = role;
       member.status = "active";
+      member.access_scope = access_scope;
+      member.project_ids_json = request.project_ids_json;
       member.invited_by_user_id = request.invited_by_user_id;
       member.created_at = timestamp;
       member.updated_at = timestamp;
 
       impl_->db->exec(
           "INSERT INTO workspace_members "
-          "(id, workspace_id, user_id, email, role, status, active, invited_by_user_id, joined_at, created_at, updated_at) "
-          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          "(id, workspace_id, user_id, email, role, status, active, access_scope, project_ids_json, invited_by_user_id, joined_at, created_at, updated_at) "
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
           member.id,
           member.workspace_id,
           member.user_id,
@@ -292,6 +418,8 @@ namespace cloud::members::services
           member.role,
           member.status,
           static_cast<std::int64_t>(1),
+          member.access_scope,
+          member.project_ids_json,
           member.invited_by_user_id,
           member.created_at,
           member.created_at,
@@ -318,6 +446,8 @@ namespace cloud::members::services
     member.email = request.email;
     member.role = role;
     member.status = "active";
+    member.access_scope = access_scope;
+    member.project_ids_json = request.project_ids_json;
     member.invited_by_user_id = request.invited_by_user_id;
     member.created_at = timestamp;
     member.updated_at = timestamp;
@@ -353,7 +483,22 @@ namespace cloud::members::services
 
     if (impl_->persistent())
     {
-      auto current = impl_->find_member(request.workspace_id, request.user_id, true);
+      const auto owner_user_id = impl_->workspace_owner_user_id(request.workspace_id);
+      const auto actor_role = impl_->actor_role(request.workspace_id, request.actor_user_id);
+
+      if (actor_role != "owner" && actor_role != "admin")
+      {
+        return MemberResult<dto::MemberResponse>::failure({support::MemberErrorCode::PermissionDenied,
+                                                           "Permission denied."});
+      }
+
+      if (request.user_id == owner_user_id || (actor_role == "admin" && role == "owner"))
+      {
+        return MemberResult<dto::MemberResponse>::failure({support::MemberErrorCode::CannotModifyOwner,
+                                                           "Cannot modify workspace owner."});
+      }
+
+      auto current = impl_->find_member(request.workspace_id, request.user_id, false);
 
       if (current.failed())
       {
@@ -414,7 +559,22 @@ namespace cloud::members::services
 
     if (impl_->persistent())
     {
-      auto current = impl_->find_member(request.workspace_id, request.user_id, true);
+      const auto owner_user_id = impl_->workspace_owner_user_id(request.workspace_id);
+      const auto actor_role = impl_->actor_role(request.workspace_id, request.actor_user_id);
+
+      if (actor_role != "owner" && actor_role != "admin")
+      {
+        return MemberResult<dto::MemberResponse>::failure({support::MemberErrorCode::PermissionDenied,
+                                                           "Permission denied."});
+      }
+
+      if (request.user_id == owner_user_id)
+      {
+        return MemberResult<dto::MemberResponse>::failure({support::MemberErrorCode::CannotRemoveOwner,
+                                                           "Cannot remove workspace owner."});
+      }
+
+      auto current = impl_->find_member(request.workspace_id, request.user_id, false);
 
       if (current.failed())
       {
@@ -426,7 +586,7 @@ namespace cloud::members::services
       removed.updated_at = now_timestamp();
 
       impl_->db->exec(
-          "UPDATE workspace_members SET status = ?, active = 0, updated_at = ? WHERE workspace_id = ? AND user_id = ? AND active = 1",
+          "UPDATE workspace_members SET status = ?, active = 0, updated_at = ? WHERE workspace_id = ? AND user_id = ?",
           removed.status,
           removed.updated_at,
           removed.workspace_id,
@@ -462,6 +622,72 @@ namespace cloud::members::services
     return MemberResult<dto::MemberResponse>::success(removed);
   }
 
+  MemberResult<dto::MemberResponse> MemberService::update_member_status(
+      const dto::MemberLifecycleRequest &request,
+      const std::string &status)
+  {
+    if (request.workspace_id.empty())
+    {
+      return MemberResult<dto::MemberResponse>::failure({support::MemberErrorCode::MissingWorkspace,
+                                                         "Workspace is required."});
+    }
+
+    if (request.user_id.empty())
+    {
+      return MemberResult<dto::MemberResponse>::failure({support::MemberErrorCode::MissingUser,
+                                                         "User is required."});
+    }
+
+    if (!valid_status(status))
+    {
+      return MemberResult<dto::MemberResponse>::failure({support::MemberErrorCode::InvalidStatus,
+                                                         "Invalid member status."});
+    }
+
+    if (!impl_->persistent())
+    {
+      return MemberResult<dto::MemberResponse>::failure({support::MemberErrorCode::InternalError,
+                                                         "Persistent member storage is required."});
+    }
+
+    const auto owner_user_id = impl_->workspace_owner_user_id(request.workspace_id);
+    const auto actor_role = impl_->actor_role(request.workspace_id, request.actor_user_id);
+
+    if (actor_role != "owner" && actor_role != "admin")
+    {
+      return MemberResult<dto::MemberResponse>::failure({support::MemberErrorCode::PermissionDenied,
+                                                         "Permission denied."});
+    }
+
+    if (request.user_id == owner_user_id)
+    {
+      return MemberResult<dto::MemberResponse>::failure({status == "removed" ? support::MemberErrorCode::CannotRemoveOwner : support::MemberErrorCode::CannotModifyOwner,
+                                                         status == "removed" ? "Cannot remove workspace owner." : "Cannot modify workspace owner."});
+    }
+
+    auto current = impl_->find_member(request.workspace_id, request.user_id, false);
+
+    if (current.failed())
+    {
+      return current;
+    }
+
+    auto member = current.value();
+    member.status = status;
+    member.updated_at = now_timestamp();
+    const auto active = status == "active" ? 1 : 0;
+
+    impl_->db->exec(
+        "UPDATE workspace_members SET status = ?, active = ?, updated_at = ? WHERE workspace_id = ? AND user_id = ?",
+        member.status,
+        static_cast<std::int64_t>(active),
+        member.updated_at,
+        member.workspace_id,
+        member.user_id);
+
+    return MemberResult<dto::MemberResponse>::success(member);
+  }
+
   MemberResult<std::vector<dto::MemberResponse>> MemberService::list_members(
       const dto::ListMembersRequest &request) const
   {
@@ -476,8 +702,8 @@ namespace cloud::members::services
     if (impl_->persistent())
     {
       auto rows = impl_->db->query(
-          "SELECT id, workspace_id, user_id, email, role, status, invited_by_user_id, created_at, updated_at "
-          "FROM workspace_members WHERE workspace_id = ? AND active = 1 ORDER BY created_at",
+          "SELECT id, workspace_id, user_id, email, role, status, COALESCE(access_scope, 'entire_workspace'), COALESCE(project_ids_json, ''), invited_by_user_id, created_at, updated_at "
+          "FROM workspace_members WHERE workspace_id = ? ORDER BY created_at",
           request.workspace_id);
 
       while (rows->next())

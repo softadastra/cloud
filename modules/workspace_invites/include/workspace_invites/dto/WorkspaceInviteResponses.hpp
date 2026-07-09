@@ -17,6 +17,8 @@ namespace cloud::workspace_invites::dto
     std::string role;
     std::string invited_by_user_id;
     std::string status;
+    std::string access_scope;
+    std::string project_ids_json;
     std::int64_t created_at{0};
     std::int64_t updated_at{0};
     std::int64_t expires_at{0};
@@ -32,6 +34,8 @@ namespace cloud::workspace_invites::dto
           "role", role,
           "invited_by_user_id", invited_by_user_id,
           "status", status,
+          "access_scope", access_scope,
+          "project_ids_json", project_ids_json,
           "created_at", created_at,
           "updated_at", updated_at,
           "expires_at", expires_at);

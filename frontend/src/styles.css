@@ -593,3 +593,10 @@ textarea {
   color: #f8fafc;
   font-size: 0.8rem;
 }
+
+.scope-entire_workspace { background: #eef4fb; color: #214b73; border-color: #c9ddee; }
+.scope-selected_projects { background: #fff6db; color: #725110; border-color: #ecd78e; }
+.checkbox-list { display: grid; gap: 0.45rem; margin: 0.5rem 0 1rem; }
+.checkbox-list label { display: flex; align-items: center; gap: 0.45rem; color: #2f3746; }
+.muted-row { opacity: 0.72; background: #fafafa; }
+.row select { width: auto; min-width: 7rem; }

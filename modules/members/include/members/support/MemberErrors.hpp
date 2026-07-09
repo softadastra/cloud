@@ -28,9 +28,13 @@ namespace cloud::members::support
     MissingUser,
     MissingEmail,
     InvalidRole,
+    InvalidStatus,
     MemberNotFound,
     UserNotFound,
     MemberAlreadyExists,
+    CannotModifyOwner,
+    CannotRemoveOwner,
+    PermissionDenied,
     Unauthorized,
     InternalError
   };
