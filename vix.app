@@ -63,6 +63,24 @@ path = modules/auth
 kind = service
 depends = []
 
+
+[module.realtime]
+enabled = true
+path = modules/realtime
+kind = backend
+depends = [
+  "auth",
+  "notifications",
+]
+
+[module.notifications]
+enabled = true
+path = modules/notifications
+kind = service
+depends = [
+  "auth",
+]
+
 [module.workspaces]
 enabled = true
 path = modules/workspaces
@@ -78,6 +96,7 @@ kind = service
 depends = [
   "auth",
   "workspaces",
+  "notifications",
 ]
 
 
@@ -89,6 +108,7 @@ depends = [
   "auth",
   "workspaces",
   "members",
+  "notifications",
 ]
 
 [module.projects]
@@ -116,6 +136,7 @@ kind = service
 depends = [
   "auth",
   "packages",
+  "notifications",
 ]
 
 [module.tokens]
@@ -143,4 +164,14 @@ kind = service
 depends = [
   "auth",
   "projects",
+  "notifications",
+]
+
+[module.feedback]
+enabled = true
+path = modules/feedback
+kind = service
+depends = [
+  "auth",
+  "notifications",
 ]

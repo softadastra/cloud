@@ -13,6 +13,7 @@
  *  Softadastra Cloud
  */
 #include <members/services/MemberService.hpp>
+#include <notifications/services/NotificationService.hpp>
 
 #include <algorithm>
 #include <atomic>
@@ -516,6 +517,17 @@ namespace cloud::members::services
           member.workspace_id,
           member.user_id);
 
+      cloud::notifications::services::NotificationService notifications;
+      cloud::notifications::dto::CreateNotificationRequest note;
+      note.workspace_id = member.workspace_id;
+      note.recipient_user_id = member.user_id;
+      note.actor_user_id = request.actor_user_id;
+      note.type = "member_role_changed";
+      note.title = "Your workspace role changed";
+      note.message = "Your role was changed to " + member.role + ".";
+      note.data_json = "{}";
+      notifications.create(note);
+
       return MemberResult<dto::MemberResponse>::success(member);
     }
 
@@ -591,6 +603,17 @@ namespace cloud::members::services
           removed.updated_at,
           removed.workspace_id,
           removed.user_id);
+
+      cloud::notifications::services::NotificationService notifications;
+      cloud::notifications::dto::CreateNotificationRequest note;
+      note.workspace_id = removed.workspace_id;
+      note.recipient_user_id = removed.user_id;
+      note.actor_user_id = request.actor_user_id;
+      note.type = "member_removed";
+      note.title = "Your workspace access was removed";
+      note.message = "Your access to this workspace was removed.";
+      note.data_json = "{}";
+      notifications.create(note);
 
       return MemberResult<dto::MemberResponse>::success(removed);
     }
@@ -684,6 +707,17 @@ namespace cloud::members::services
         member.updated_at,
         member.workspace_id,
         member.user_id);
+
+    cloud::notifications::services::NotificationService notifications;
+    cloud::notifications::dto::CreateNotificationRequest note;
+    note.workspace_id = member.workspace_id;
+    note.recipient_user_id = member.user_id;
+    note.actor_user_id = request.actor_user_id;
+    note.type = member.status == "active" ? "member_reactivated" : (member.status == "suspended" ? "member_suspended" : "member_removed");
+    note.title = member.status == "active" ? "Your workspace access was restored" : (member.status == "suspended" ? "Your workspace access was suspended" : "Your workspace access was removed");
+    note.message = member.status == "active" ? "Your access to this workspace was restored." : (member.status == "suspended" ? "Your access to this workspace was suspended." : "Your access to this workspace was removed.");
+    note.data_json = "{}";
+    notifications.create(note);
 
     return MemberResult<dto::MemberResponse>::success(member);
   }

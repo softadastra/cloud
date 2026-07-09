@@ -19,6 +19,7 @@ target_compile_features(cloud_build_reports PUBLIC cxx_std_20)
 target_link_libraries(cloud_build_reports
   PUBLIC
     vix::vix
+    cloud_notifications
 )
 
 if(DEFINED VIX_MODULE_build_reports_LINKS)

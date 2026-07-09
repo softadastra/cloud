@@ -3,6 +3,8 @@
   import AccessScopeBadge from '$lib/components/AccessScopeBadge.svelte';
   import RoleBadge from '$lib/components/RoleBadge.svelte';
   import { auth } from '$lib/stores/auth';
+  import { notifications } from '$lib/stores/notifications';
+  import { onMount } from 'svelte';
   import { workspaceContext } from '$lib/stores/workspace';
 
   const navItems = [
@@ -14,14 +16,27 @@
     { href: '/lockfiles', label: 'Lockfiles' },
     { href: '/build-reports', label: 'Build reports' },
     { href: '/tokens', label: 'Tokens' },
-    { href: '/members', label: 'Members' }
+    { href: '/members', label: 'Members' },
+    { href: '/notifications', label: 'Notifications' },
+    { href: '/feedback', label: 'Feedback' }
   ];
 
   $: initial = ($auth.user?.name || $auth.user?.email || 'U').slice(0, 1).toUpperCase();
+  $: if ($auth.session) {
+    notifications.connectRealtime($auth.session.id);
+  }
+
+  onMount(() => {
+    if ($auth.session) {
+      notifications.loadNotifications();
+      notifications.connectRealtime($auth.session.id);
+    }
+  });
 
   function logout() {
     auth.clear();
     workspaceContext.clear();
+    notifications.clear();
     window.location.href = '/login';
   }
 
@@ -62,6 +77,12 @@
       </nav>
 
       <div class="account-menu">
+        <a class="notification-button" href="/notifications" aria-label="Open notifications">
+          <span>Notifications</span>
+          {#if $notifications.unreadCount > 0}
+            <strong>{$notifications.unreadCount}</strong>
+          {/if}
+        </a>
         <button class="avatar-button" type="button" on:click={openAccount} aria-label="Open account">
           <span class="avatar">{initial}</span>
           <span>{$auth.user?.name || $auth.user?.email}</span>

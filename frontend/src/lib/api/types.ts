@@ -194,3 +194,46 @@ export type PackageVersionsData = { package_versions: PackageVersion[] };
 export type LockfilesData = { lockfiles: Lockfile[] };
 export type BuildReportsData = { build_reports: BuildReport[] };
 export type WorkspaceInvitesData = { invites: WorkspaceInvite[] };
+
+
+export type NotificationItem = {
+  id: string;
+  workspace_id: string;
+  project_id: string;
+  recipient_user_id: string;
+  actor_user_id: string;
+  type: string;
+  title: string;
+  message: string;
+  data_json: string;
+  read_at: number;
+  created_at: number;
+};
+
+export type NotificationPreferences = {
+  id: string;
+  user_id: string;
+  workspace_id: string;
+  notify_invites: boolean;
+  notify_member_changes: boolean;
+  notify_tokens: boolean;
+  notify_projects: boolean;
+  notify_packages: boolean;
+  notify_lockfiles: boolean;
+  notify_build_reports: boolean;
+  notify_security: boolean;
+  created_at: number;
+  updated_at: number;
+};
+
+export type FeedbackItem = {
+  id: string;
+  user_id: string;
+  workspace_id: string;
+  category: string;
+  title: string;
+  message: string;
+  status: string;
+  created_at: number;
+  updated_at: number;
+};

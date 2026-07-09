@@ -1,0 +1,5 @@
+#ifndef cloud_notifications_module_hpp
+#define cloud_notifications_module_hpp
+namespace vix { class App; }
+namespace cloud::notifications { class NotificationsModule { public: static const char *name(); static void register_routes(vix::App &app); }; }
+#endif

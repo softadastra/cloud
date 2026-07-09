@@ -1,0 +1,15 @@
+name = "notifications"
+kind = "service"
+
+[routes]
+prefix = "/api/notifications"
+
+[deps]
+registry = []
+
+links = [
+  "vix::db",
+]
+
+[tests]
+enabled = true

@@ -11,6 +11,7 @@
   import { canCreateProject, canManageMembers, canManageTokens, canPublishPackageVersion, canSubmitBuildReport, canUploadLockfile } from '$lib/permissions';
   import { auth } from '$lib/stores/auth';
   import { workspaceContext } from '$lib/stores/workspace';
+  import { notifications } from '$lib/stores/notifications';
 
   let workspaces: Workspace[] = [];
   let invitations: WorkspaceInvite[] = [];
@@ -137,7 +138,9 @@
     }
   }
 
-  onMount(load);
+  onMount(async () => {
+    await Promise.all([load(), notifications.loadNotifications()]);
+  });
 </script>
 
 <svelte:head>
@@ -241,5 +244,32 @@
         <li>{step}</li>
       {/each}
     </ol>
+  </div>
+</section>
+
+
+<section class="triple-grid">
+  <div class="panel span-2">
+    <div class="panel-header"><h2>What changed recently</h2><a class="inline-link" href="/notifications">Open all</a></div>
+    {#if $notifications.loading}
+      <p class="muted">Loading activity...</p>
+    {:else if $notifications.notifications.length === 0}
+      <EmptyState title="No notifications yet." body="Workspace activity and important account updates will appear here." />
+    {:else}
+      <div class="table-list compact">
+        {#each $notifications.notifications.slice(0, 5) as item}
+          <a class="row" href="/notifications">
+            <span><strong>{item.title}</strong><small>{item.message}</small></span>
+            <span class="actions"><small>{item.read_at ? 'read' : 'unread'}</small></span>
+          </a>
+        {/each}
+      </div>
+    {/if}
+  </div>
+
+  <div class="panel">
+    <div class="panel-header"><h2>Send feedback</h2></div>
+    <p class="muted">Your feedback helps shape Softadastra Cloud.</p>
+    <a class="inline-link" href="/feedback">Send feedback</a>
   </div>
 </section>

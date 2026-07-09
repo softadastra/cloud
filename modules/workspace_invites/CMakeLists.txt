@@ -19,6 +19,7 @@ target_compile_features(cloud_workspace_invites PUBLIC cxx_std_20)
 target_link_libraries(cloud_workspace_invites
   PUBLIC
     vix::vix
+    cloud_notifications
 )
 
 if(DEFINED VIX_MODULE_workspace_invites_LINKS)

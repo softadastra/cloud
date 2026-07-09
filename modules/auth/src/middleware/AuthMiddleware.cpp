@@ -73,7 +73,10 @@ namespace cloud::auth::middleware
               req.path() == "/api/packages" ||
               req.path() == "/api/package_versions" ||
               req.path() == "/api/lockfiles" ||
-              req.path() == "/api/build_reports");
+              req.path() == "/api/build_reports" ||
+              req.path() == "/api/notifications" ||
+              req.path() == "/api/activity" ||
+              req.path() == "/api/feedback");
     }
 
     void json_error(
@@ -291,6 +294,13 @@ namespace cloud::auth::middleware
         return json_value(req, "user_id");
       }
 
+      if (starts_with(req.path(), "/api/notifications") ||
+          starts_with(req.path(), "/api/activity") ||
+          starts_with(req.path(), "/api/feedback"))
+      {
+        return json_value(req, "user_id");
+      }
+
       for (const auto &key : {"owner_user_id", "uploaded_by_user_id", "submitted_by_user_id", "published_by_user_id"})
       {
         const auto value = json_value(req, key);
@@ -318,6 +328,12 @@ namespace cloud::auth::middleware
         const vix::Request &req)
     {
       if (starts_with(req.path(), "/api/tokens"))
+      {
+        return true;
+      }
+
+      if (starts_with(req.path(), "/api/feedback/list_workspace") ||
+          starts_with(req.path(), "/api/feedback/update_status"))
       {
         return true;
       }
@@ -517,10 +533,15 @@ namespace cloud::auth::middleware
 
     if ((starts_with(req.path(), "/api/workspace_invites/list_mine") ||
          starts_with(req.path(), "/api/workspace_invites/accept") ||
-         starts_with(req.path(), "/api/workspace_invites/decline")) &&
+         starts_with(req.path(), "/api/workspace_invites/decline") ||
+         starts_with(req.path(), "/api/notifications") ||
+         starts_with(req.path(), "/api/feedback/create") ||
+         starts_with(req.path(), "/api/feedback/list_mine")) &&
         workspace_id.empty())
     {
       ctx.role = "member";
+      ctx.status = "active";
+      ctx.access_scope = "entire_workspace";
       req.set_state<AuthContext>(ctx);
       return true;
     }

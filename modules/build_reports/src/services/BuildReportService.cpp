@@ -13,6 +13,7 @@
  *  Softadastra Cloud
  */
 #include <build_reports/services/BuildReportService.hpp>
+#include <notifications/services/NotificationService.hpp>
 
 #include <algorithm>
 #include <atomic>
@@ -207,6 +208,16 @@ namespace cloud::build_reports::services
           report.id, report.workspace_id, report.project_id, report.submitted_by_user_id, report.status, report.target, report.profile,
           report.branch, report.commit_sha, report.toolchain, report.summary_json, report.diagnostics_json, report.duration_ms,
           report.warnings_count, report.errors_count, report.created_at, report.created_at);
+      cloud::notifications::services::NotificationService notifications;
+      cloud::notifications::dto::CreateNotificationRequest note;
+      note.workspace_id = report.workspace_id;
+      note.project_id = report.project_id;
+      note.actor_user_id = report.submitted_by_user_id;
+      note.type = report.status == "failed" ? "build_report_failed" : "build_report_submitted";
+      note.title = report.status == "failed" ? "Build failed" : "Build report submitted";
+      note.message = report.status == "failed" ? "A build failed on " + report.branch + "." : "A build report was submitted.";
+      note.data_json = "{}";
+      notifications.create_for_project_members(note);
       return BuildReportResult<dto::BuildReportResponse>::success(report);
     }
 

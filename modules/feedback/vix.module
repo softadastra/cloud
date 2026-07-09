@@ -1,0 +1,15 @@
+name = "feedback"
+kind = "service"
+
+[routes]
+prefix = "/api/feedback"
+
+[deps]
+registry = []
+
+links = [
+  "vix::db",
+]
+
+[tests]
+enabled = true

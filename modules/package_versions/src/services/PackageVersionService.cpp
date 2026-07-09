@@ -13,6 +13,7 @@
  *  Softadastra Cloud
  */
 #include <package_versions/services/PackageVersionService.hpp>
+#include <notifications/services/NotificationService.hpp>
 
 #include <algorithm>
 #include <atomic>
@@ -216,6 +217,16 @@ namespace cloud::package_versions::services
             "INSERT INTO package_versions (id, workspace_id, package_id, published_by_user_id, version, archive_url, checksum_sha256, manifest_json, status, size_bytes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             version.id, version.workspace_id, version.package_id, version.published_by_user_id, version.version, version.archive_url,
             version.checksum_sha256, version.manifest_json, version.status, version.size_bytes, version.created_at, version.updated_at);
+
+        cloud::notifications::services::NotificationService notifications;
+        cloud::notifications::dto::CreateNotificationRequest note;
+        note.workspace_id = version.workspace_id;
+        note.actor_user_id = version.published_by_user_id;
+        note.type = "package_version_published";
+        note.title = "Package version published";
+        note.message = "A package version was published: " + version.version + ".";
+        note.data_json = "{}";
+        notifications.create_for_workspace_members(note);
 
         return PackageVersionResult<dto::PackageVersionResponse>::success(version);
       }

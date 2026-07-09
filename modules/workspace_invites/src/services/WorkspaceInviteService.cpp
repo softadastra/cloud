@@ -1,4 +1,5 @@
 #include <workspace_invites/services/WorkspaceInviteService.hpp>
+#include <notifications/services/NotificationService.hpp>
 
 #include <algorithm>
 #include <atomic>
@@ -305,6 +306,17 @@ namespace cloud::workspace_invites::services
           invite.expires_at);
 
       auto created = impl_->find_invite(invite.id);
+      const auto notification_invite = created.ok() ? created.value() : invite;
+      cloud::notifications::services::NotificationService notifications;
+      cloud::notifications::dto::CreateNotificationRequest note;
+      note.workspace_id = notification_invite.workspace_id;
+      note.recipient_user_id = notification_invite.invited_user_id;
+      note.actor_user_id = notification_invite.invited_by_user_id;
+      note.type = "workspace_invite_received";
+      note.title = "Workspace invitation received";
+      note.message = "You have been invited to join " + notification_invite.workspace_name + " as " + notification_invite.role + ".";
+      note.data_json = "{}";
+      notifications.create(note);
       return created.ok() ? created : WorkspaceInviteResult<dto::WorkspaceInviteResponse>::success(invite);
     }
 
@@ -444,6 +456,16 @@ namespace cloud::workspace_invites::services
           invite.invited_user_id,
           invite.updated_at,
           invite.id);
+      cloud::notifications::services::NotificationService notifications;
+      cloud::notifications::dto::CreateNotificationRequest note;
+      note.workspace_id = invite.workspace_id;
+      note.recipient_user_id = invite.invited_by_user_id;
+      note.actor_user_id = request.user_id;
+      note.type = "workspace_invite_accepted";
+      note.title = "Workspace invitation accepted";
+      note.message = invite.invited_email + " accepted the invitation to " + invite.workspace_name + ".";
+      note.data_json = "{}";
+      notifications.create(note);
       return WorkspaceInviteResult<dto::WorkspaceInviteResponse>::success(invite);
     }
 
@@ -487,6 +509,16 @@ namespace cloud::workspace_invites::services
       invite.status = "declined";
       invite.updated_at = now_timestamp();
       impl_->db->exec("UPDATE workspace_invites SET status = ?, updated_at = ? WHERE id = ?", invite.status, invite.updated_at, invite.id);
+      cloud::notifications::services::NotificationService notifications;
+      cloud::notifications::dto::CreateNotificationRequest note;
+      note.workspace_id = invite.workspace_id;
+      note.recipient_user_id = invite.invited_by_user_id;
+      note.actor_user_id = request.user_id;
+      note.type = "workspace_invite_declined";
+      note.title = "Workspace invitation declined";
+      note.message = invite.invited_email + " declined the invitation to " + invite.workspace_name + ".";
+      note.data_json = "{}";
+      notifications.create(note);
       return WorkspaceInviteResult<dto::WorkspaceInviteResponse>::success(invite);
     }
 
