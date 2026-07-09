@@ -14,6 +14,7 @@
  */
 #include <members/MembersModule.hpp>
 #include <members/services/MemberService.hpp>
+#include <members/support/MemberErrors.hpp>
 
 #include <string>
 
@@ -90,7 +91,29 @@ int main()
                           auto second = service.invite_member(request);
 
                           Assert::equal(first.ok(), true);
-                          Assert::equal(second.failed(), true); }));
+                          Assert::equal(second.failed(), true);
+                          Assert::equal(
+                              cloud::members::support::http_status_for_member_error(second.error()),
+                              409);
+                          Assert::equal(
+                              cloud::members::support::public_code_for_member_error(second.error()),
+                              std::string("workspace_member_already_exists")); }));
+
+  registry.add(TestCase("member errors expose user not found contract", []
+                        {
+                          cloud::members::support::MemberError error{
+                              cloud::members::support::MemberErrorCode::UserNotFound,
+                              "User not found for this email"};
+
+                          Assert::equal(
+                              cloud::members::support::http_status_for_member_error(error),
+                              404);
+                          Assert::equal(
+                              cloud::members::support::public_code_for_member_error(error),
+                              std::string("user_not_found"));
+                          Assert::equal(
+                              cloud::members::support::public_message_for_member_error(error),
+                              std::string("User not found for this email")); }));
 
   registry.add(TestCase("member service updates member role", []
                         {

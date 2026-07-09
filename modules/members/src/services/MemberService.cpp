@@ -124,6 +124,37 @@ namespace cloud::members::services
       return rows->next();
     }
 
+    MemberResult<std::string> resolve_user_id_for_invite(
+        const dto::InviteMemberRequest &request) const
+    {
+      if (!request.user_id.empty())
+      {
+        return MemberResult<std::string>::success(request.user_id);
+      }
+
+      if (request.email.empty())
+      {
+        return MemberResult<std::string>::failure({support::MemberErrorCode::MissingEmail,
+                                                   "Email is required."});
+      }
+
+      auto rows = db->query(
+          "SELECT id FROM users WHERE email = ? AND active = 1 "
+          "UNION "
+          "SELECT id FROM rix_auth_users WHERE email = ? AND active = 1 "
+          "LIMIT 1",
+          request.email,
+          request.email);
+
+      if (!rows->next())
+      {
+        return MemberResult<std::string>::failure({support::MemberErrorCode::UserNotFound,
+                                                   "User not found for this email"});
+      }
+
+      return MemberResult<std::string>::success(rows->row().getString(0));
+    }
+
     MemberResult<dto::MemberResponse> find_member(
         const std::string &workspace_id,
         const std::string &user_id,
@@ -169,16 +200,16 @@ namespace cloud::members::services
                                                          "Workspace is required."});
     }
 
-    if (request.user_id.empty())
-    {
-      return MemberResult<dto::MemberResponse>::failure({support::MemberErrorCode::MissingUser,
-                                                         "User is required."});
-    }
-
     if (request.email.empty())
     {
       return MemberResult<dto::MemberResponse>::failure({support::MemberErrorCode::MissingEmail,
                                                          "Email is required."});
+    }
+
+    if (!impl_->persistent() && request.user_id.empty())
+    {
+      return MemberResult<dto::MemberResponse>::failure({support::MemberErrorCode::MissingUser,
+                                                         "User is required."});
     }
 
     const auto role = normalize_role(request.role);
@@ -197,7 +228,15 @@ namespace cloud::members::services
                                                            "Workspace not found."});
       }
 
-      auto existing = impl_->find_member(request.workspace_id, request.user_id, false);
+      auto resolved_user_id = impl_->resolve_user_id_for_invite(request);
+
+      if (resolved_user_id.failed())
+      {
+        return MemberResult<dto::MemberResponse>::failure(resolved_user_id.error());
+      }
+
+      const auto target_user_id = resolved_user_id.value();
+      auto existing = impl_->find_member(request.workspace_id, target_user_id, false);
 
       if (existing.ok() && existing.value().status == "active")
       {
@@ -234,7 +273,7 @@ namespace cloud::members::services
       dto::MemberResponse member;
       member.id = make_member_id();
       member.workspace_id = request.workspace_id;
-      member.user_id = request.user_id;
+      member.user_id = target_user_id;
       member.email = request.email;
       member.role = role;
       member.status = "active";

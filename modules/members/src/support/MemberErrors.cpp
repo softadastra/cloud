@@ -34,6 +34,7 @@ namespace cloud::members::support
       return 401;
 
     case MemberErrorCode::MemberNotFound:
+    case MemberErrorCode::UserNotFound:
       return 404;
 
     case MemberErrorCode::MemberAlreadyExists:
@@ -71,8 +72,11 @@ namespace cloud::members::support
     case MemberErrorCode::MemberNotFound:
       return "member_not_found";
 
+    case MemberErrorCode::UserNotFound:
+      return "user_not_found";
+
     case MemberErrorCode::MemberAlreadyExists:
-      return "member_already_exists";
+      return "workspace_member_already_exists";
 
     case MemberErrorCode::InternalError:
     default:
@@ -111,8 +115,11 @@ namespace cloud::members::support
     case MemberErrorCode::MemberNotFound:
       return "Member not found.";
 
+    case MemberErrorCode::UserNotFound:
+      return "User not found for this email";
+
     case MemberErrorCode::MemberAlreadyExists:
-      return "Member already exists.";
+      return "Workspace member already exists.";
 
     case MemberErrorCode::InternalError:
     default:

@@ -29,6 +29,7 @@ namespace cloud::members::support
     MissingEmail,
     InvalidRole,
     MemberNotFound,
+    UserNotFound,
     MemberAlreadyExists,
     Unauthorized,
     InternalError

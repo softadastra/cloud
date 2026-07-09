@@ -7,14 +7,14 @@ export function listMembers(workspaceId: string) {
 
 export function inviteMember(input: {
   workspaceId: string;
-  userId: string;
+  userId?: string;
   email: string;
   role: string;
   invitedByUserId: string;
 }) {
   return api.post<{ member: Member }>('/api/members/invite', {
     workspace_id: input.workspaceId,
-    user_id: input.userId,
+    user_id: input.userId ?? '',
     email: input.email,
     role: input.role,
     invited_by_user_id: input.invitedByUserId

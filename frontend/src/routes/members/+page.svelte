@@ -9,7 +9,6 @@
   let workspaces: Workspace[] = [];
   let members: Member[] = [];
   let selectedWorkspaceId = '';
-  let targetUserId = '';
   let email = '';
   let role = 'member';
   let loading = true;
@@ -47,13 +46,12 @@
 
   async function submitInvite() {
     const user = $auth.user;
-    if (!user || !selectedWorkspaceId || !targetUserId.trim() || !email.trim()) return;
+    if (!user || !selectedWorkspaceId || !email.trim()) return;
     saving = true;
     error = '';
     try {
-      const invited = await inviteMember({ workspaceId: selectedWorkspaceId, userId: targetUserId.trim(), email: email.trim(), role, invitedByUserId: user.id });
+      const invited = await inviteMember({ workspaceId: selectedWorkspaceId, email: email.trim(), role, invitedByUserId: user.id });
       members = [invited.member, ...members];
-      targetUserId = '';
       email = '';
       role = 'member';
     } catch (err) {
@@ -74,8 +72,7 @@
   <form class="panel" on:submit|preventDefault={submitInvite}>
     <div class="panel-header"><h2>Add member</h2></div>
     <label>Workspace<select bind:value={selectedWorkspaceId} on:change={loadMembers}>{#each workspaces as workspace}<option value={workspace.id}>{workspace.name}</option>{/each}</select></label>
-    <label>User ID<input bind:value={targetUserId} placeholder="user_..." required /></label>
-    <label>Email<input bind:value={email} type="email" required /></label>
+    <label>Email<input bind:value={email} type="email" placeholder="teammate@example.com" required /></label>
     <label>Role<select bind:value={role}><option value="admin">admin</option><option value="member">member</option><option value="viewer">viewer</option></select></label>
     <button type="submit" disabled={saving || !selectedWorkspaceId}>{saving ? 'Adding...' : 'Add member'}</button>
   </form>
