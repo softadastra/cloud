@@ -411,8 +411,12 @@ namespace cloud::workspaces::services
     if (impl_->persistent())
     {
       auto rows = impl_->db->query(
-          "SELECT id, owner_user_id, name, slug, active, created_at, updated_at "
-          "FROM workspaces WHERE owner_user_id = ? ORDER BY created_at",
+          "SELECT DISTINCT w.id, w.owner_user_id, w.name, w.slug, w.active, w.created_at, w.updated_at "
+          "FROM workspaces w "
+          "LEFT JOIN workspace_members wm ON wm.workspace_id = w.id AND wm.active = 1 "
+          "WHERE w.owner_user_id = ? OR wm.user_id = ? "
+          "ORDER BY w.created_at",
+          owner_user_id,
           owner_user_id);
 
       while (rows->next())

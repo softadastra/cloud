@@ -157,6 +157,21 @@ export type BuildReport = {
   created_at: number;
 };
 
+
+export type WorkspaceInvite = {
+  id: string;
+  workspace_id: string;
+  workspace_name: string;
+  invited_email: string;
+  invited_user_id: string;
+  role: string;
+  invited_by_user_id: string;
+  status: string;
+  created_at: number;
+  updated_at: number;
+  expires_at: number;
+};
+
 export type WorkspacesData = { workspaces: Workspace[] };
 export type ProjectsData = { projects: Project[] };
 export type MembersData = { members: Member[] };
@@ -165,3 +180,4 @@ export type PackagesData = { packages: Package[] };
 export type PackageVersionsData = { package_versions: PackageVersion[] };
 export type LockfilesData = { lockfiles: Lockfile[] };
 export type BuildReportsData = { build_reports: BuildReport[] };
+export type WorkspaceInvitesData = { invites: WorkspaceInvite[] };

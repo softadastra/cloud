@@ -80,6 +80,17 @@ depends = [
   "workspaces",
 ]
 
+
+[module.workspace_invites]
+enabled = true
+path = modules/workspace_invites
+kind = service
+depends = [
+  "auth",
+  "workspaces",
+  "members",
+]
+
 [module.projects]
 enabled = true
 path = modules/projects

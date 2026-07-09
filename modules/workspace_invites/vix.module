@@ -1,0 +1,16 @@
+name = "workspace_invites"
+kind = "service"
+
+[routes]
+prefix = "/api/workspace_invites"
+
+[deps]
+registry = [
+]
+
+links = [
+  "vix::db",
+]
+
+[tests]
+enabled = true

@@ -67,6 +67,7 @@ namespace cloud::auth::middleware
       return req.method() == "GET" &&
              (req.path() == "/api/workspaces" ||
               req.path() == "/api/members" ||
+              req.path() == "/api/workspace_invites" ||
               req.path() == "/api/tokens" ||
               req.path() == "/api/projects" ||
               req.path() == "/api/packages" ||
@@ -221,6 +222,23 @@ namespace cloud::auth::middleware
         return json_value(req, "invited_by_user_id");
       }
 
+      if (starts_with(req.path(), "/api/workspace_invites/create"))
+      {
+        return json_value(req, "invited_by_user_id");
+      }
+
+      if (starts_with(req.path(), "/api/workspace_invites/revoke"))
+      {
+        return json_value(req, "revoked_by_user_id");
+      }
+
+      if (starts_with(req.path(), "/api/workspace_invites/list_mine") ||
+          starts_with(req.path(), "/api/workspace_invites/accept") ||
+          starts_with(req.path(), "/api/workspace_invites/decline"))
+      {
+        return json_value(req, "user_id");
+      }
+
       if (starts_with(req.path(), "/api/tokens"))
       {
         return json_value(req, "user_id");
@@ -253,6 +271,7 @@ namespace cloud::auth::middleware
         const vix::Request &req)
     {
       return starts_with(req.path(), "/api/members") ||
+             starts_with(req.path(), "/api/workspace_invites") ||
              starts_with(req.path(), "/api/tokens");
     }
 
@@ -426,6 +445,16 @@ namespace cloud::auth::middleware
 
     if (starts_with(req.path(), "/api/workspaces") && workspace_id.empty())
     {
+      req.set_state<AuthContext>(ctx);
+      return true;
+    }
+
+    if ((starts_with(req.path(), "/api/workspace_invites/list_mine") ||
+         starts_with(req.path(), "/api/workspace_invites/accept") ||
+         starts_with(req.path(), "/api/workspace_invites/decline")) &&
+        workspace_id.empty())
+    {
+      ctx.role = "member";
       req.set_state<AuthContext>(ctx);
       return true;
     }
