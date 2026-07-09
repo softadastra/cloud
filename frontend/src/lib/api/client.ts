@@ -6,7 +6,7 @@ export type ApiClientOptions = {
   authHeader?: 'authorization' | 'x-session-id' | 'both';
 };
 
-const DEFAULT_BASE_URL = '';
+const DEFAULT_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV ? 'http://localhost:8080' : '');
 
 function isApiFailure(value: unknown): value is ApiFailure {
   return Boolean(
@@ -37,17 +37,23 @@ export class ApiClient {
     return this.request<T>('GET', path);
   }
 
-  async post<T>(path: string, body: unknown): Promise<T> {
+  async post<T>(path: string, body: Record<string, unknown>): Promise<T> {
     return this.request<T>('POST', path, body);
   }
 
-  private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  private async request<T>(method: string, path: string, body?: Record<string, unknown>): Promise<T> {
     const headers: Record<string, string> = {
       Accept: 'application/json'
     };
 
+    const init: RequestInit = {
+      method,
+      headers
+    };
+
     if (body !== undefined) {
-      headers['Content-Type'] = 'application/json';
+      headers['Content-Type'] = 'application/json; charset=utf-8';
+      init.body = JSON.stringify(body);
     }
 
     if (this.sessionId) {
@@ -60,13 +66,9 @@ export class ApiClient {
       }
     }
 
-    const response = await fetch(`${this.baseUrl}${path}`, {
-      method,
-      headers,
-      body: body === undefined ? undefined : JSON.stringify(body)
-    });
-
-    const payload = (await response.json()) as ApiResponse<T>;
+    const response = await fetch(`${this.baseUrl}${path}`, init);
+    const text = await response.text();
+    const payload = text ? (JSON.parse(text) as ApiResponse<T>) : null;
 
     if (!response.ok || isApiFailure(payload)) {
       const failure = isApiFailure(payload)
@@ -75,7 +77,7 @@ export class ApiClient {
       throw new ApiError(response.status, failure.error, failure.message);
     }
 
-    if (payload.ok !== true || !('data' in payload)) {
+    if (!payload || payload.ok !== true || !('data' in payload)) {
       throw new ApiError(response.status, 'invalid_response', 'Invalid API response.');
     }
 
@@ -83,4 +85,4 @@ export class ApiClient {
   }
 }
 
-export const api = new ApiClient({ authHeader: 'both' });
+export const api = new ApiClient({ authHeader: 'authorization' });

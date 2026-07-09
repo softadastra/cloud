@@ -18,6 +18,20 @@ namespace cloud::presentation::middleware
     // Recommended production order:
     // CORS -> rate limit -> request logging -> security headers -> body limits -> auth -> routes.
 
+    // CORS for local dashboard development.
+    app.use([](vix::Request &req, vix::Response &res, vix::App::Next next)
+    {
+      (void)req;
+
+      res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Session-Id, X-Access-Token, X-Requested-With, Accept, Origin");
+      next();
+    });
+
+    app.use(vix::middleware::app::cors_dev({
+      "http://localhost:5173",
+      "http://127.0.0.1:5173"
+    }));
+
     // Security headers.
     app.use(vix::middleware::app::security_headers_dev(false));
 
