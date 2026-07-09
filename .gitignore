@@ -53,3 +53,6 @@ cmake-build-*/
 cmd.md
 structure.md
 
+database.sqlite
+*.sqlite
+*.sqlite3

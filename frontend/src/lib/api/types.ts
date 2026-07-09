@@ -29,6 +29,8 @@ export type User = {
   email: string;
   email_verified: boolean;
   active: boolean;
+  created_at?: number;
+  display_name?: string;
 };
 
 export type Session = {
@@ -55,6 +57,8 @@ export type Workspace = {
   name: string;
   slug: string;
   owner_user_id: string;
+  current_user_role?: 'owner' | 'admin' | 'member' | 'viewer' | string;
+  current_user_is_owner?: boolean;
   active: boolean;
   created_at: number;
   updated_at: number;

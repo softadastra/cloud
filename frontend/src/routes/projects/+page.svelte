@@ -8,7 +8,15 @@
   import { createProject, listProjects } from '$lib/api/projects';
   import { listWorkspaces } from '$lib/api/workspaces';
   import { ApiError, type BuildReport, type Lockfile, type Package, type PackageVersion, type Project, type Workspace } from '$lib/api/types';
+  import EmptyState from '$lib/components/EmptyState.svelte';
+  import InlineError from '$lib/components/InlineError.svelte';
+  import PageHeader from '$lib/components/PageHeader.svelte';
+  import ReadOnlyNotice from '$lib/components/ReadOnlyNotice.svelte';
+  import RoleBadge from '$lib/components/RoleBadge.svelte';
+  import StatusBadge from '$lib/components/StatusBadge.svelte';
+  import { canCreatePackage, canCreateProject } from '$lib/permissions';
   import { auth } from '$lib/stores/auth';
+  import { workspaceContext } from '$lib/stores/workspace';
 
   let workspaces: Workspace[] = [];
   let selectedWorkspaceId = '';
@@ -28,6 +36,8 @@
   let packageName = '';
 
   $: projectSlug = projectSlug || slugify(projectName);
+  $: selectedWorkspace = workspaces.find((workspace) => workspace.id === selectedWorkspaceId) ?? null;
+  $: currentRole = selectedWorkspace?.current_user_role ?? 'viewer';
 
   function slugify(value: string) {
     return value
@@ -54,6 +64,7 @@
       const workspaceData = await listWorkspaces(user.id);
       workspaces = workspaceData.workspaces;
       selectedWorkspaceId = params.get('workspace_id') ?? workspaces[0]?.id ?? '';
+      workspaceContext.setWorkspaces(workspaces, selectedWorkspaceId);
       await loadProjects(params.get('project_id'));
     } catch (err) {
       error = err instanceof ApiError ? err.message : 'Unable to load projects.';
@@ -76,6 +87,7 @@
   }
 
   async function selectWorkspace() {
+    workspaceContext.setSelectedWorkspace(selectedWorkspaceId);
     history.replaceState(null, '', `/projects?workspace_id=${selectedWorkspaceId}`);
     await loadProjects();
   }
@@ -111,7 +123,7 @@
   async function submitProject() {
     const user = $auth.user;
 
-    if (!user || !selectedWorkspaceId || !projectName.trim()) {
+    if (!user || !selectedWorkspaceId || !projectName.trim() || !canCreateProject(currentRole)) {
       return;
     }
 
@@ -142,7 +154,7 @@
   async function submitPackage() {
     const user = $auth.user;
 
-    if (!user || !selectedWorkspaceId || !packageName.trim()) {
+    if (!user || !selectedWorkspaceId || !packageName.trim() || !canCreatePackage(currentRole)) {
       return;
     }
 
@@ -170,8 +182,8 @@
 
 <svelte:head><title>Projects | Softadastra Cloud</title></svelte:head>
 
-<section class="page-header"><div><p class="eyebrow">Projects</p><h1>Projects</h1></div></section>
-{#if error}<p class="form-error">{error}</p>{/if}
+<PageHeader eyebrow="Projects" title="Projects" workspaceName={selectedWorkspace?.name ?? ''} role={currentRole} />
+<InlineError message={error} />
 
 <section class="dashboard-grid">
   <div class="panel">
@@ -192,46 +204,53 @@
       <div class="table-list compact">
         {#each projects as project}
           <button class="row-button" type="button" on:click={() => selectProject(project)}><span><strong>{project.name}</strong><small>{project.slug}</small></span><small>{project.id === selectedProject?.id ? 'selected' : 'open'}</small></button>
-        {:else}<p class="muted padded">No projects.</p>{/each}
+        {:else}<EmptyState title={canCreateProject(currentRole) ? 'No projects yet.' : 'No projects have been created yet.'} body={canCreateProject(currentRole) ? 'Create the first project.' : ''} />{/each}
       </div>
     {/if}
   </div>
 
-  <form class="panel" on:submit|preventDefault={submitProject}>
-    <div class="panel-header"><h2>New project</h2></div>
-    <label>Name<input bind:value={projectName} required /></label>
-    <label>Slug<input bind:value={projectSlug} required /></label>
-    <label>Repository URL<input bind:value={projectRepository} /></label>
-    <button type="submit" disabled={savingProject || !selectedWorkspaceId}>{savingProject ? 'Creating...' : 'Create project'}</button>
-  </form>
+  <div class="panel">
+    {#if canCreateProject(currentRole)}
+      <form on:submit|preventDefault={submitProject}>
+        <div class="panel-header"><h2>New project</h2></div>
+        <label>Name<input bind:value={projectName} required /></label>
+        <label>Slug<input bind:value={projectSlug} required /></label>
+        <label>Repository URL<input bind:value={projectRepository} /></label>
+        <button type="submit" disabled={savingProject || !selectedWorkspaceId}>{savingProject ? 'Creating...' : 'Create project'}</button>
+      </form>
+    {:else}
+      <div class="panel-header"><h2>Projects</h2></div>
+      <ReadOnlyNotice message="You can view projects in this workspace, but you cannot create or edit them." />
+    {/if}
+  </div>
 </section>
 
 {#if selectedProject}
   <section class="panel detail-panel">
-    <div class="panel-header"><h2>{selectedProject.name}</h2><a class="inline-link" href="/projects?workspace_id={selectedWorkspaceId}&project_id={selectedProject.id}">Project detail</a></div>
+    <div class="panel-header"><h2>{selectedProject.name}</h2><span><RoleBadge role={currentRole} /></span></div>
     <div class="meta-grid"><span><strong>ID</strong>{selectedProject.id}</span><span><strong>Slug</strong>{selectedProject.slug}</span><span><strong>Branch</strong>{selectedProject.default_branch || 'main'}</span></div>
   </section>
 
   <section class="triple-grid">
     <div class="panel">
       <div class="panel-header"><h2>Packages</h2><span>{packages.length}</span></div>
-      <form class="inline-form" on:submit|preventDefault={submitPackage}><input bind:value={packageName} placeholder="vix/package-name" /><button type="submit" disabled={savingPackage}>{savingPackage ? '...' : 'Create'}</button></form>
-      <div class="table-list compact">{#each packages as pkg}<div class="row"><span><strong>{pkg.name}</strong><small>{pkg.visibility}</small></span></div>{:else}<p class="muted padded">No packages.</p>{/each}</div>
+      {#if canCreatePackage(currentRole)}<form class="inline-form" on:submit|preventDefault={submitPackage}><input bind:value={packageName} placeholder="vix/package-name" /><button type="submit" disabled={savingPackage}>{savingPackage ? '...' : 'Create'}</button></form>{/if}
+      <div class="table-list compact">{#each packages as pkg}<div class="row"><span><strong>{pkg.name}</strong><small>{pkg.visibility}</small></span></div>{:else}<EmptyState title="No packages yet." body={canCreatePackage(currentRole) ? 'Create the first package.' : 'No packages have been created yet.'} />{/each}</div>
     </div>
 
     <div class="panel">
       <div class="panel-header"><h2>Lockfiles</h2><span>{lockfiles.length}</span></div>
-      <div class="table-list compact">{#each lockfiles as lockfile}<div class="row"><span><strong>{lockfile.checksum_sha256.slice(0, 12)}</strong><small>{lockfile.source}</small></span></div>{:else}<p class="muted padded">No lockfiles.</p>{/each}</div>
+      <div class="table-list compact">{#each lockfiles as lockfile}<div class="row"><span><strong>{lockfile.checksum_sha256.slice(0, 12)}</strong><small>{lockfile.source}</small></span></div>{:else}<EmptyState title="No lockfiles uploaded yet." body={currentRole === 'viewer' ? 'No lockfile has been uploaded yet.' : 'Upload the first lockfile from the Lockfiles page.'} />{/each}</div>
     </div>
 
     <div class="panel">
       <div class="panel-header"><h2>Build reports</h2><span>{buildReports.length}</span></div>
-      <div class="table-list compact">{#each buildReports as report}<div class="row"><span><strong>{report.status}</strong><small>{report.target} {report.profile}</small></span><small>{report.errors_count} errors</small></div>{:else}<p class="muted padded">No build reports.</p>{/each}</div>
+      <div class="table-list compact">{#each buildReports as report}<div class="row"><span><strong>{report.status}</strong><small>{report.target} {report.profile}</small></span><span class="actions"><StatusBadge status={report.status} /><small>{report.errors_count} errors</small></span></div>{:else}<EmptyState title="No build reports yet." body={currentRole === 'viewer' ? 'No build reports have been submitted yet.' : 'Submit the first report from the Build reports page.'} />{/each}</div>
     </div>
   </section>
 
   <section class="panel">
     <div class="panel-header"><h2>Package versions</h2><span>{packageVersions.length}</span></div>
-    <div class="table-list compact">{#each packageVersions as version}<div class="row"><span><strong>{version.version}</strong><small>{version.package_id}</small></span><small>{version.status}</small></div>{:else}<p class="muted padded">No package versions.</p>{/each}</div>
+    <div class="table-list compact">{#each packageVersions as version}<div class="row"><span><strong>{version.version}</strong><small>{version.package_id}</small></span><small>{version.status}</small></div>{:else}<EmptyState title="No package versions yet." body={currentRole === 'viewer' ? 'No package version has been published yet.' : 'Publish the first version from the Versions page.'} />{/each}</div>
   </section>
 {/if}

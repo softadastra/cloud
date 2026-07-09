@@ -41,6 +41,20 @@ namespace cloud::auth::dto
   {
     std::string session_id;
   };
+
+  struct UpdateProfileRequest
+  {
+    std::string session_id;
+    std::string display_name;
+  };
+
+  struct ChangePasswordRequest
+  {
+    std::string session_id;
+    std::string current_password;
+    std::string new_password;
+    std::string confirm_new_password;
+  };
 } // namespace cloud::auth::dto
 
 #endif // cloud_auth_dto_auth_requests_hpp

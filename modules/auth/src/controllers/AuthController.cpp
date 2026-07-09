@@ -16,6 +16,8 @@
 
 #include <auth/dto/AuthRequests.hpp>
 #include <auth/services/AuthService.hpp>
+
+#include <rix/auth/AuthError.hpp>
 #include <auth/support/AuthErrors.hpp>
 
 #include <string>
@@ -88,6 +90,67 @@ namespace cloud::auth::controllers
         const vix::json::Json &body)
     {
       return body.value("session_id", "");
+    }
+
+    dto::UpdateProfileRequest read_update_profile_request(
+        const vix::json::Json &body)
+    {
+      return {
+          body.value("session_id", ""),
+          body.value("display_name", ""),
+      };
+    }
+
+    dto::ChangePasswordRequest read_change_password_request(
+        const vix::json::Json &body)
+    {
+      return {
+          body.value("session_id", ""),
+          body.value("current_password", ""),
+          body.value("new_password", ""),
+          body.value("confirm_new_password", ""),
+      };
+    }
+
+    void write_account_error(
+        vix::Response &res,
+        const rixlib::auth::AuthError &error)
+    {
+      using rixlib::auth::AuthErrorCode;
+
+      if (error.is(AuthErrorCode::InvalidSession) ||
+          error.is(AuthErrorCode::SessionExpired) ||
+          error.is(AuthErrorCode::SessionRevoked))
+      {
+        json_error(res, 401, "unauthenticated", "Authentication is required.");
+        return;
+      }
+
+      if (error.is(AuthErrorCode::InvalidCredentials))
+      {
+        json_error(res, 403, "current_password_invalid", "Current password is invalid.");
+        return;
+      }
+
+      if (error.is(AuthErrorCode::InvalidPassword))
+      {
+        json_error(res, 400, "password_too_weak", error.message().empty() ? "Password is too weak." : error.message());
+        return;
+      }
+
+      if (error.is(AuthErrorCode::InvalidInput) || error.is(AuthErrorCode::ValidationError))
+      {
+        json_error(res, 400, "invalid_request", error.message().empty() ? "Invalid request." : error.message());
+        return;
+      }
+
+      if (error.is(AuthErrorCode::UserNotFound))
+      {
+        json_error(res, 404, "user_not_found", "User not found.");
+        return;
+      }
+
+      json_error(res, 500, "auth_error", error.message().empty() ? "Authentication service error." : error.message());
     }
 
     bool require_json_object(
@@ -227,14 +290,61 @@ namespace cloud::auth::controllers
         return;
       }
 
+      auto profile = auth_service().user_profile(session.value().user_id());
+
+      if (profile.failed())
+      {
+        write_account_error(res, profile.error());
+        return;
+      }
+
       json_ok(
           res,
           vix::json::o(
+              "user", profile.value().to_json(),
               "session", vix::json::o(
                   "id", session.value().id(),
                   "user_id", session.value().user_id(),
                   "expires_at", session.value().expires_at(),
                   "last_seen_at", session.value().last_seen_at(),
                   "revoked", session.value().revoked()))); });
+
+    app.post("/api/auth/update_profile", [](vix::Request &req, vix::Response &res)
+             {
+      const auto &body = req.json();
+
+      if (!require_json_object(body, res))
+      {
+        return;
+      }
+
+      auto updated = auth_service().update_profile(read_update_profile_request(body));
+
+      if (updated.failed())
+      {
+        write_account_error(res, updated.error());
+        return;
+      }
+
+      json_ok(res, vix::json::o("user", updated.value().to_json())); });
+
+    app.post("/api/auth/change_password", [](vix::Request &req, vix::Response &res)
+             {
+      const auto &body = req.json();
+
+      if (!require_json_object(body, res))
+      {
+        return;
+      }
+
+      auto changed = auth_service().change_password(read_change_password_request(body));
+
+      if (changed.failed())
+      {
+        write_account_error(res, changed.error());
+        return;
+      }
+
+      json_ok(res, vix::json::o("message", "Password changed successfully.")); });
   }
 } // namespace cloud::auth::controllers

@@ -148,6 +148,15 @@ namespace cloud::workspaces::services
       return workspace;
     }
 
+    dto::WorkspaceResponse row_to_workspace_with_role(
+        const vix::db::ResultRow &row) const
+    {
+      auto workspace = row_to_workspace(row);
+      workspace.current_user_role = row.getString(7);
+      workspace.current_user_is_owner = workspace.current_user_role == "owner";
+      return workspace;
+    }
+
     bool workspace_slug_exists(
         const std::string &slug,
         const std::string &except_id = "") const
@@ -411,17 +420,19 @@ namespace cloud::workspaces::services
     if (impl_->persistent())
     {
       auto rows = impl_->db->query(
-          "SELECT DISTINCT w.id, w.owner_user_id, w.name, w.slug, w.active, w.created_at, w.updated_at "
+          "SELECT DISTINCT w.id, w.owner_user_id, w.name, w.slug, w.active, w.created_at, w.updated_at, "
+          "CASE WHEN w.owner_user_id = ? THEN 'owner' ELSE COALESCE(wm.role, 'viewer') END AS current_user_role "
           "FROM workspaces w "
           "LEFT JOIN workspace_members wm ON wm.workspace_id = w.id AND wm.active = 1 "
           "WHERE w.owner_user_id = ? OR wm.user_id = ? "
           "ORDER BY w.created_at",
           owner_user_id,
+          owner_user_id,
           owner_user_id);
 
       while (rows->next())
       {
-        workspaces.push_back(impl_->row_to_workspace(rows->row()));
+        workspaces.push_back(impl_->row_to_workspace_with_role(rows->row()));
       }
 
       return WorkspaceResult<std::vector<dto::WorkspaceResponse>>::success(workspaces);
@@ -431,7 +442,10 @@ namespace cloud::workspaces::services
     {
       if (entry.second.owner_user_id == owner_user_id)
       {
-        workspaces.push_back(entry.second);
+        auto workspace = entry.second;
+        workspace.current_user_role = "owner";
+        workspace.current_user_is_owner = true;
+        workspaces.push_back(workspace);
       }
     }
 

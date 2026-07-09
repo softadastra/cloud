@@ -8,11 +8,18 @@
   let name = '';
   let email = '';
   let password = '';
+  let confirmPassword = '';
   let error = '';
   let loading = false;
 
   async function submit() {
     error = '';
+
+    if (password !== confirmPassword) {
+      error = 'Passwords do not match.';
+      return;
+    }
+
     loading = true;
 
     try {
@@ -50,11 +57,16 @@
         <input bind:value={password} type="password" autocomplete="new-password" minlength="8" required />
       </label>
 
+      <label>
+        Confirm password
+        <input bind:value={confirmPassword} type="password" autocomplete="new-password" minlength="8" required />
+      </label>
+
       {#if error}
         <p class="form-error">{error}</p>
       {/if}
 
-      <button type="submit" disabled={loading}>{loading ? 'Creating...' : 'Create account'}</button>
+      <button type="submit" disabled={loading || password !== confirmPassword}>{loading ? 'Creating...' : 'Create account'}</button>
     </form>
 
     <p class="switch-link"><a href="/login">Sign in</a></p>

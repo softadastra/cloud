@@ -1,5 +1,8 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
+  import RoleBadge from '$lib/components/RoleBadge.svelte';
   import { auth } from '$lib/stores/auth';
+  import { workspaceContext } from '$lib/stores/workspace';
 
   const navItems = [
     { href: '/dashboard', label: 'Dashboard' },
@@ -13,9 +16,16 @@
     { href: '/members', label: 'Members' }
   ];
 
+  $: initial = ($auth.user?.name || $auth.user?.email || 'U').slice(0, 1).toUpperCase();
+
   function logout() {
     auth.clear();
+    workspaceContext.clear();
     window.location.href = '/login';
+  }
+
+  async function openAccount() {
+    await goto('/account');
   }
 </script>
 
@@ -27,13 +37,36 @@
         <span>Softadastra Cloud</span>
       </a>
 
+      {#if $workspaceContext.workspaces.length > 0}
+        <label class="workspace-switcher">
+          Workspace
+          <select
+            value={$workspaceContext.selectedWorkspace?.id ?? ''}
+            on:change={(event) => workspaceContext.setSelectedWorkspace(event.currentTarget.value)}
+          >
+            {#each $workspaceContext.workspaces as workspace}
+              <option value={workspace.id}>{workspace.name}</option>
+            {/each}
+          </select>
+        </label>
+        {#if $workspaceContext.selectedWorkspace}
+          <p class="context-line compact">Your role: <RoleBadge role={$workspaceContext.selectedWorkspace.current_user_role} /></p>
+        {/if}
+      {/if}
+
       <nav aria-label="Primary navigation">
         {#each navItems as item}
           <a href={item.href}>{item.label}</a>
         {/each}
       </nav>
 
-      <button class="ghost" type="button" on:click={logout}>Logout</button>
+      <div class="account-menu">
+        <button class="avatar-button" type="button" on:click={openAccount} aria-label="Open account">
+          <span class="avatar">{initial}</span>
+          <span>{$auth.user?.name || $auth.user?.email}</span>
+        </button>
+        <button class="ghost" type="button" on:click={logout}>Logout</button>
+      </div>
     </aside>
   {/if}
 

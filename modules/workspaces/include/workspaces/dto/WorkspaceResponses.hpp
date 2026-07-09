@@ -28,6 +28,8 @@ namespace cloud::workspaces::dto
     std::string name;
     std::string slug;
     std::string owner_user_id;
+    std::string current_user_role;
+    bool current_user_is_owner{false};
     bool active{true};
     std::int64_t created_at{0};
     std::int64_t updated_at{0};
@@ -39,6 +41,8 @@ namespace cloud::workspaces::dto
           "name", name,
           "slug", slug,
           "owner_user_id", owner_user_id,
+          "current_user_role", current_user_role,
+          "current_user_is_owner", current_user_is_owner,
           "active", active,
           "created_at", created_at,
           "updated_at", updated_at);

@@ -5,7 +5,12 @@
   import { listProjects } from '$lib/api/projects';
   import { acceptWorkspaceInvite, declineWorkspaceInvite, listMyWorkspaceInvites } from '$lib/api/workspaceInvites';
   import { ApiError, type Project, type Workspace, type WorkspaceInvite } from '$lib/api/types';
+  import EmptyState from '$lib/components/EmptyState.svelte';
+  import InlineError from '$lib/components/InlineError.svelte';
+  import RoleBadge from '$lib/components/RoleBadge.svelte';
+  import { canCreateProject, canManageMembers, canManageTokens, canPublishPackageVersion, canSubmitBuildReport, canUploadLockfile } from '$lib/permissions';
   import { auth } from '$lib/stores/auth';
+  import { workspaceContext } from '$lib/stores/workspace';
 
   let workspaces: Workspace[] = [];
   let invitations: WorkspaceInvite[] = [];
@@ -17,7 +22,24 @@
   let workspaceName = '';
   let workspaceSlug = '';
 
+  $: pendingInvitations = invitations.filter((invite) => invite.status === 'pending');
+  $: primaryWorkspace = workspaces[0] ?? null;
+  $: primaryRole = primaryWorkspace?.current_user_role ?? 'viewer';
+  $: nextSteps = roleNextSteps(primaryRole);
+
   $: workspaceSlug = workspaceSlug || slugify(workspaceName);
+
+  function roleNextSteps(role: string) {
+    if (canManageMembers(role) || canManageTokens(role)) {
+      return ['Invite team members', 'Create CLI token', 'Create project', 'Publish package'];
+    }
+
+    if (canCreateProject(role)) {
+      return ['Create project', 'Upload lockfile', 'Submit build report'];
+    }
+
+    return ['View projects', 'View packages', 'View build reports'];
+  }
 
   function slugify(value: string) {
     return value
@@ -39,13 +61,20 @@
     error = '';
 
     try {
-      const [workspaceData, invitationData] = await Promise.all([listWorkspaces(user.id), listMyWorkspaceInvites(user.id, user.email)]);
+      const workspaceData = await listWorkspaces(user.id);
       workspaces = workspaceData.workspaces;
-      invitations = invitationData.invites;
+      workspaceContext.setWorkspaces(workspaces);
+
+      try {
+        const invitationData = await listMyWorkspaceInvites(user.id, user.email);
+        invitations = invitationData.invites.filter((invite) => invite.status === 'pending');
+      } catch {
+        invitations = [];
+      }
       const projectLists = await Promise.all(workspaces.slice(0, 3).map((workspace) => listProjects(workspace.id).catch(() => ({ projects: [] }))));
       recentProjects = projectLists.flatMap((item) => item.projects).slice(0, 5);
     } catch (err) {
-      error = err instanceof ApiError ? err.message : 'Unable to load dashboard.';
+      error = err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Unable to load dashboard.';
     } finally {
       loading = false;
     }
@@ -68,6 +97,7 @@
         ownerUserId: user.id
       });
       workspaces = [created.workspace, ...workspaces];
+      workspaceContext.setWorkspaces(workspaces, created.workspace.id);
       workspaceName = '';
       workspaceSlug = '';
       await goto(`/workspaces?workspace_id=${created.workspace.id}`);
@@ -88,6 +118,7 @@
       invitations = invitations.filter((item) => item.id !== invite.id);
       const data = await listWorkspaces(user.id);
       workspaces = data.workspaces;
+      workspaceContext.setWorkspaces(workspaces, invite.workspace_id);
       success = `You joined ${invite.workspace_name || 'the workspace'}.`;
     } catch (err) {
       error = err instanceof ApiError ? err.message : 'Unable to accept invitation.';
@@ -124,13 +155,13 @@
   <p class="success-message">{success}</p>
 {/if}
 
-{#if invitations.length > 0}
+{#if pendingInvitations.length > 0}
   <section class="panel invitations-panel">
-    <div class="panel-header"><h2>Invitations</h2><span>{invitations.length}</span></div>
+    <div class="panel-header"><h2>Pending invitations</h2><span>{pendingInvitations.length}</span></div>
     <div class="table-list">
-      {#each invitations as invite}
+      {#each pendingInvitations as invite}
         <div class="row">
-          <span><strong>You have been invited to join {invite.workspace_name || invite.workspace_id}</strong><small>Role: {invite.role}</small></span>
+          <span><strong>You have been invited to join {invite.workspace_name || invite.workspace_id}</strong><small>Role: <RoleBadge role={invite.role} /></small></span>
           <span class="actions horizontal"><button class="small" type="button" on:click={() => acceptInvite(invite)}>Accept</button><button class="small danger" type="button" on:click={() => declineInvite(invite)}>Decline</button></span>
         </div>
       {/each}
@@ -157,7 +188,7 @@
               <strong>{workspace.name}</strong>
               <small>{workspace.slug}</small>
             </span>
-            <small>{workspace.active ? 'active' : 'inactive'}</small>
+            <span class="actions"><RoleBadge role={workspace.current_user_role} /><small>{workspace.active ? 'active' : 'inactive'}</small></span>
           </a>
         {/each}
       </div>
@@ -194,26 +225,21 @@
     <div class="table-list compact">
       {#each recentProjects as project}
         <a class="row" href="/projects?workspace_id={project.workspace_id}&project_id={project.id}"><span><strong>{project.name}</strong><small>{project.slug}</small></span></a>
-      {:else}<p class="muted padded">No projects yet.</p>{/each}
+      {:else}<EmptyState title="No recent projects yet." body={canCreateProject(primaryRole) ? 'Create a project to start tracking activity.' : 'No projects are visible yet.'} />{/each}
     </div>
   </div>
 
   <div class="panel">
     <div class="panel-header"><h2>CLI state</h2></div>
-    <p class="muted">Create a CLI token, then connect locally with Vix.</p>
-    <a class="inline-link" href="/tokens">Open tokens</a>
+    {#if canManageTokens(primaryRole)}<p class="muted">Create a CLI token, then connect locally with Vix.</p><a class="inline-link" href="/tokens">Open tokens</a>{:else}<p class="muted">CLI tokens are managed by workspace owners and admins.</p>{/if}
   </div>
 
   <div class="panel">
     <div class="panel-header"><h2>Next steps</h2></div>
     <ol class="steps-list">
-      <li>Create a workspace</li>
-      <li>Create a project</li>
-      <li>Create a CLI token</li>
-      <li>Connect Vix locally</li>
-      <li>Publish your first package</li>
-      <li>Upload a lockfile</li>
-      <li>Submit a build report</li>
+      {#each nextSteps as step}
+        <li>{step}</li>
+      {/each}
     </ol>
   </div>
 </section>

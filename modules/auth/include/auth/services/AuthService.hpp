@@ -16,6 +16,7 @@
 #define cloud_auth_services_auth_service_hpp
 
 #include <auth/dto/AuthRequests.hpp>
+#include <auth/dto/AuthResponses.hpp>
 
 #include <memory>
 #include <string>
@@ -55,6 +56,15 @@ namespace cloud::auth::services
         const std::string &user_id);
 
     rixlib::auth::AuthResult<rixlib::auth::Token> issue_token(
+        const std::string &user_id);
+
+    rixlib::auth::AuthResult<dto::AuthUserResponse> update_profile(
+        const dto::UpdateProfileRequest &request);
+
+    rixlib::auth::AuthStatus change_password(
+        const dto::ChangePasswordRequest &request);
+
+    rixlib::auth::AuthResult<dto::AuthUserResponse> user_profile(
         const std::string &user_id);
 
   private:

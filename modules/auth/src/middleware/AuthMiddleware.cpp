@@ -270,9 +270,19 @@ namespace cloud::auth::middleware
     bool action_requires_admin(
         const vix::Request &req)
     {
-      return starts_with(req.path(), "/api/members") ||
-             starts_with(req.path(), "/api/workspace_invites") ||
-             starts_with(req.path(), "/api/tokens");
+      if (starts_with(req.path(), "/api/tokens"))
+      {
+        return true;
+      }
+
+      if (starts_with(req.path(), "/api/workspace_invites/create") ||
+          starts_with(req.path(), "/api/workspace_invites/list") ||
+          starts_with(req.path(), "/api/workspace_invites/revoke"))
+      {
+        return true;
+      }
+
+      return starts_with(req.path(), "/api/members") && !action_is_read(req);
     }
 
     bool role_allows(
@@ -284,14 +294,14 @@ namespace cloud::auth::middleware
         return true;
       }
 
-      if (action_is_read(req))
-      {
-        return role == "admin" || role == "member" || role == "viewer";
-      }
-
       if (action_requires_admin(req))
       {
         return role == "admin";
+      }
+
+      if (action_is_read(req))
+      {
+        return role == "admin" || role == "member" || role == "viewer";
       }
 
       return role == "admin" || role == "member";

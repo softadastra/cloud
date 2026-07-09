@@ -15,6 +15,7 @@
 #ifndef cloud_auth_dto_auth_responses_hpp
 #define cloud_auth_dto_auth_responses_hpp
 
+#include <cstdint>
 #include <string>
 
 #include <vix.hpp>
@@ -25,18 +26,22 @@ namespace cloud::auth::dto
   {
     std::string id;
     std::string name;
+    std::string display_name;
     std::string email;
     bool email_verified{false};
     bool active{true};
+    std::int64_t created_at{0};
 
     vix::json::Json to_json() const
     {
-      return {
+      return vix::json::o(
           "id", id,
           "name", name,
+          "display_name", display_name,
           "email", email,
           "email_verified", email_verified,
-          "active", active};
+          "active", active,
+          "created_at", created_at);
     }
   };
 
@@ -49,11 +54,11 @@ namespace cloud::auth::dto
 
     vix::json::Json to_json() const
     {
-      return {
+      return vix::json::o(
           "user", user.to_json(),
           "session_id", session_id,
           "token", token,
-          "token_expires_at", token_expires_at};
+          "token_expires_at", token_expires_at);
     }
   };
 
@@ -63,8 +68,8 @@ namespace cloud::auth::dto
 
     vix::json::Json to_json() const
     {
-      return {
-          "user", user.to_json()};
+      return vix::json::o(
+          "user", user.to_json());
     }
   };
 } // namespace cloud::auth::dto

@@ -1,3 +1,4 @@
+import { browser } from '$app/environment';
 import { ApiError, type ApiFailure, type ApiResponse } from './types';
 
 export type ApiClientOptions = {
@@ -7,6 +8,7 @@ export type ApiClientOptions = {
 };
 
 const DEFAULT_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV ? 'http://localhost:8080' : '');
+const AUTH_STORAGE_KEY = 'softadastra.cloud.auth';
 
 function isApiFailure(value: unknown): value is ApiFailure {
   return Boolean(
@@ -33,6 +35,25 @@ export class ApiClient {
     this.sessionId = sessionId;
   }
 
+  private restoreSessionFromStorage() {
+    if (this.sessionId || !browser) {
+      return;
+    }
+
+    const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+
+    if (!raw) {
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as { session?: { id?: string } };
+      this.sessionId = parsed.session?.id ?? null;
+    } catch {
+      this.sessionId = null;
+    }
+  }
+
   async get<T>(path: string): Promise<T> {
     return this.request<T>('GET', path);
   }
@@ -42,6 +63,8 @@ export class ApiClient {
   }
 
   private async request<T>(method: string, path: string, body?: Record<string, unknown>): Promise<T> {
+    this.restoreSessionFromStorage();
+
     const headers: Record<string, string> = {
       Accept: 'application/json'
     };
@@ -68,7 +91,13 @@ export class ApiClient {
 
     const response = await fetch(`${this.baseUrl}${path}`, init);
     const text = await response.text();
-    const payload = text ? (JSON.parse(text) as ApiResponse<T>) : null;
+    let payload: ApiResponse<T> | null = null;
+
+    try {
+      payload = text ? (JSON.parse(text) as ApiResponse<T>) : null;
+    } catch {
+      throw new ApiError(response.status, 'invalid_json_response', `Invalid JSON response from ${path}.`);
+    }
 
     if (!response.ok || isApiFailure(payload)) {
       const failure = isApiFailure(payload)

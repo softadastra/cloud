@@ -58,6 +58,13 @@ function createAuthStore() {
       persist(state);
       store.set(state);
     },
+    setUser(user: User) {
+      store.update((state) => {
+        const next = { ...state, user };
+        persist(next);
+        return next;
+      });
+    },
     clear() {
       persist(initialState);
       store.set(initialState);
