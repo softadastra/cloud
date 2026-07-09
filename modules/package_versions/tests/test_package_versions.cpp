@@ -14,6 +14,7 @@
  */
 #include <package_versions/PackageVersionsModule.hpp>
 #include <package_versions/services/PackageVersionService.hpp>
+#include <package_versions/support/PackageVersionErrors.hpp>
 
 #include <string>
 
@@ -97,7 +98,13 @@ int main()
                           auto second = service.publish_package_version(request);
 
                           Assert::equal(first.ok(), true);
-                          Assert::equal(second.failed(), true); }));
+                          Assert::equal(second.failed(), true);
+                          Assert::equal(
+                              cloud::package_versions::support::http_status_for_package_version_error(second.error()),
+                              409);
+                          Assert::equal(
+                              cloud::package_versions::support::public_code_for_package_version_error(second.error()),
+                              std::string("package_version_already_exists")); }));
 
   registry.add(TestCase("package version service allows same version for different packages", []
                         {
@@ -205,6 +212,25 @@ int main()
                           Assert::equal(
                               found.value().id,
                               published.value().id); }));
+
+  registry.add(TestCase("package version service returns not found for missing version", []
+                        {
+                          cloud::package_versions::services::PackageVersionService service;
+
+                          cloud::package_versions::dto::PackageVersionLookupRequest lookup;
+                          lookup.workspace_id = "workspace_123";
+                          lookup.package_id = "package_123";
+                          lookup.version_id = "version_missing";
+
+                          auto found = service.find_package_version(lookup);
+
+                          Assert::equal(found.failed(), true);
+                          Assert::equal(
+                              cloud::package_versions::support::http_status_for_package_version_error(found.error()),
+                              404);
+                          Assert::equal(
+                              cloud::package_versions::support::public_code_for_package_version_error(found.error()),
+                              std::string("package_version_not_found")); }));
 
   registry.add(TestCase("package version service resolves version by number", []
                         {

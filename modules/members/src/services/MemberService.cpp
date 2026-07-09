@@ -18,9 +18,14 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <cstdlib>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <unordered_map>
+
+#include <vix/config/Config.hpp>
+#include <vix/db/db.hpp>
 
 namespace cloud::members::services
 {
@@ -77,6 +82,69 @@ namespace cloud::members::services
   class MemberService::Impl
   {
   public:
+    Impl()
+    {
+      const char *use_db = std::getenv("SOFTADASTRA_CLOUD_USE_DB");
+
+      if (use_db != nullptr && std::string(use_db) == "1")
+      {
+        vix::config::Config cfg{".env"};
+        db = std::make_unique<vix::db::Database>(cfg);
+      }
+    }
+
+    bool persistent() const
+    {
+      return db != nullptr;
+    }
+
+    dto::MemberResponse row_to_member(
+        const vix::db::ResultRow &row) const
+    {
+      dto::MemberResponse member;
+      member.id = row.getString(0);
+      member.workspace_id = row.getString(1);
+      member.user_id = row.getString(2);
+      member.email = row.getString(3);
+      member.role = row.getString(4);
+      member.status = row.getString(5);
+      member.invited_by_user_id = row.getString(6);
+      member.created_at = row.getInt64(7);
+      member.updated_at = row.getInt64(8);
+      return member;
+    }
+
+    bool workspace_exists(
+        const std::string &workspace_id) const
+    {
+      auto rows = db->query(
+          "SELECT id FROM workspaces WHERE id = ? LIMIT 1",
+          workspace_id);
+
+      return rows->next();
+    }
+
+    MemberResult<dto::MemberResponse> find_member(
+        const std::string &workspace_id,
+        const std::string &user_id,
+        bool active_only) const
+    {
+      const auto sql = active_only
+                           ? "SELECT id, workspace_id, user_id, email, role, status, invited_by_user_id, created_at, updated_at FROM workspace_members WHERE workspace_id = ? AND user_id = ? AND active = 1 LIMIT 1"
+                           : "SELECT id, workspace_id, user_id, email, role, status, invited_by_user_id, created_at, updated_at FROM workspace_members WHERE workspace_id = ? AND user_id = ? LIMIT 1";
+
+      auto rows = db->query(sql, workspace_id, user_id);
+
+      if (!rows->next())
+      {
+        return MemberResult<dto::MemberResponse>::failure({support::MemberErrorCode::MemberNotFound,
+                                                           "Member not found."});
+      }
+
+      return MemberResult<dto::MemberResponse>::success(row_to_member(rows->row()));
+    }
+
+    std::unique_ptr<vix::db::Database> db;
     std::unordered_map<std::string, dto::MemberResponse> members_by_id;
     std::unordered_map<std::string, std::string> member_id_by_workspace_user;
   };
@@ -119,6 +187,78 @@ namespace cloud::members::services
     {
       return MemberResult<dto::MemberResponse>::failure({support::MemberErrorCode::InvalidRole,
                                                          "Member role must be owner, admin, member or viewer."});
+    }
+
+    if (impl_->persistent())
+    {
+      if (!impl_->workspace_exists(request.workspace_id))
+      {
+        return MemberResult<dto::MemberResponse>::failure({support::MemberErrorCode::MissingWorkspace,
+                                                           "Workspace not found."});
+      }
+
+      auto existing = impl_->find_member(request.workspace_id, request.user_id, false);
+
+      if (existing.ok() && existing.value().status == "active")
+      {
+        return MemberResult<dto::MemberResponse>::failure({support::MemberErrorCode::MemberAlreadyExists,
+                                                           "Member already exists in this workspace."});
+      }
+
+      const auto timestamp = now_timestamp();
+
+      if (existing.ok())
+      {
+        auto member = existing.value();
+        member.email = request.email;
+        member.role = role;
+        member.status = "active";
+        member.invited_by_user_id = request.invited_by_user_id;
+        member.updated_at = timestamp;
+
+        impl_->db->exec(
+            "UPDATE workspace_members "
+            "SET email = ?, role = ?, status = ?, active = 1, invited_by_user_id = ?, updated_at = ? "
+            "WHERE workspace_id = ? AND user_id = ?",
+            member.email,
+            member.role,
+            member.status,
+            member.invited_by_user_id,
+            member.updated_at,
+            member.workspace_id,
+            member.user_id);
+
+        return MemberResult<dto::MemberResponse>::success(member);
+      }
+
+      dto::MemberResponse member;
+      member.id = make_member_id();
+      member.workspace_id = request.workspace_id;
+      member.user_id = request.user_id;
+      member.email = request.email;
+      member.role = role;
+      member.status = "active";
+      member.invited_by_user_id = request.invited_by_user_id;
+      member.created_at = timestamp;
+      member.updated_at = timestamp;
+
+      impl_->db->exec(
+          "INSERT INTO workspace_members "
+          "(id, workspace_id, user_id, email, role, status, active, invited_by_user_id, joined_at, created_at, updated_at) "
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          member.id,
+          member.workspace_id,
+          member.user_id,
+          member.email,
+          member.role,
+          member.status,
+          static_cast<std::int64_t>(1),
+          member.invited_by_user_id,
+          member.created_at,
+          member.created_at,
+          member.updated_at);
+
+      return MemberResult<dto::MemberResponse>::success(member);
     }
 
     const auto key = member_key(request.workspace_id, request.user_id);
@@ -172,6 +312,29 @@ namespace cloud::members::services
                                                          "Member role must be owner, admin, member or viewer."});
     }
 
+    if (impl_->persistent())
+    {
+      auto current = impl_->find_member(request.workspace_id, request.user_id, true);
+
+      if (current.failed())
+      {
+        return current;
+      }
+
+      auto member = current.value();
+      member.role = role;
+      member.updated_at = now_timestamp();
+
+      impl_->db->exec(
+          "UPDATE workspace_members SET role = ?, updated_at = ? WHERE workspace_id = ? AND user_id = ? AND active = 1",
+          member.role,
+          member.updated_at,
+          member.workspace_id,
+          member.user_id);
+
+      return MemberResult<dto::MemberResponse>::success(member);
+    }
+
     const auto key = member_key(request.workspace_id, request.user_id);
     auto member_id = impl_->member_id_by_workspace_user.find(key);
 
@@ -208,6 +371,29 @@ namespace cloud::members::services
     {
       return MemberResult<dto::MemberResponse>::failure({support::MemberErrorCode::MissingUser,
                                                          "User is required."});
+    }
+
+    if (impl_->persistent())
+    {
+      auto current = impl_->find_member(request.workspace_id, request.user_id, true);
+
+      if (current.failed())
+      {
+        return current;
+      }
+
+      auto removed = current.value();
+      removed.status = "removed";
+      removed.updated_at = now_timestamp();
+
+      impl_->db->exec(
+          "UPDATE workspace_members SET status = ?, active = 0, updated_at = ? WHERE workspace_id = ? AND user_id = ? AND active = 1",
+          removed.status,
+          removed.updated_at,
+          removed.workspace_id,
+          removed.user_id);
+
+      return MemberResult<dto::MemberResponse>::success(removed);
     }
 
     const auto key = member_key(request.workspace_id, request.user_id);
@@ -247,6 +433,21 @@ namespace cloud::members::services
     }
 
     std::vector<dto::MemberResponse> members;
+
+    if (impl_->persistent())
+    {
+      auto rows = impl_->db->query(
+          "SELECT id, workspace_id, user_id, email, role, status, invited_by_user_id, created_at, updated_at "
+          "FROM workspace_members WHERE workspace_id = ? AND active = 1 ORDER BY created_at",
+          request.workspace_id);
+
+      while (rows->next())
+      {
+        members.push_back(impl_->row_to_member(rows->row()));
+      }
+
+      return MemberResult<std::vector<dto::MemberResponse>>::success(members);
+    }
 
     for (const auto &entry : impl_->members_by_id)
     {

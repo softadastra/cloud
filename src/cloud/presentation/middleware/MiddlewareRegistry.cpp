@@ -5,6 +5,8 @@
 
 #include <cloud/presentation/middleware/MiddlewareRegistry.hpp>
 
+#include <auth/middleware/AuthMiddleware.hpp>
+
 #include <vix.hpp>
 #include <vix/log.hpp>
 #include <vix/middleware.hpp>
@@ -34,6 +36,17 @@ namespace cloud::presentation::middleware
       (void)req;
 
       res.header("X-API", "true");
+      next();
+    });
+
+    // MVP auth and workspace permissions for protected API routes.
+    app.use("/api", [](vix::Request &req, vix::Response &res, vix::App::Next next)
+    {
+      if (!cloud::auth::middleware::require_api_auth_and_workspace_permission(req, res))
+      {
+        return;
+      }
+
       next();
     });
 

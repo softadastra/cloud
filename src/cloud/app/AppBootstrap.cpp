@@ -10,16 +10,48 @@
 #include <vix_app_modules.hpp>
 
 #include <vix.hpp>
+#include <vix/db/db.hpp>
 #include <vix/executor/RuntimeExecutor.hpp>
 #include <vix/log.hpp>
 
+#include <cstdlib>
+#include <filesystem>
 #include <memory>
 
 namespace cloud::app
 {
+  namespace
+  {
+    void initialize_database(vix::config::Config &cfg)
+    {
+      const std::filesystem::path migrations_dir{
+          cfg.getString("orm.dir", "migrations")};
+
+      vix::log::info("Applying database migrations from {}",
+                     migrations_dir.string());
+
+      vix::db::Database db{cfg};
+      vix::db::PooledConn conn{db.pool()};
+
+      vix::db::FileMigrationsRunner runner(*conn, migrations_dir);
+      runner.setTable("schema_migrations");
+      runner.applyAll();
+
+      vix::log::info("Database migrations are up to date");
+
+#ifdef _WIN32
+      _putenv_s("SOFTADASTRA_CLOUD_USE_DB", "1");
+#else
+      setenv("SOFTADASTRA_CLOUD_USE_DB", "1", 1);
+#endif
+    }
+  } // namespace
+
   int AppBootstrap::run()
   {
     vix::config::Config cfg{".env"};
+
+    initialize_database(cfg);
 
     auto executor = std::make_shared<vix::executor::RuntimeExecutor>(1u);
     vix::App app{executor};

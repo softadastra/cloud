@@ -22,6 +22,20 @@
 
 namespace cloud::auth::middleware
 {
+  struct AuthContext
+  {
+    std::string user_id;
+    std::string workspace_id;
+    std::string role;
+    bool cli_token{false};
+  };
+
+  using WorkspacePermissionResult = bool;
+
+  bool require_api_auth_and_workspace_permission(
+      vix::Request &req,
+      vix::Response &res);
+
   rixlib::auth::AuthResult<rixlib::auth::Session> authenticate_session(
       const std::string &session_id);
 

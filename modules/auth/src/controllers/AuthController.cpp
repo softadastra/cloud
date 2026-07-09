@@ -55,7 +55,8 @@ namespace cloud::auth::controllers
       res.json(
           vix::json::o(
               "ok", true,
-              "message", message));
+              "data", vix::json::o(
+                  "message", message)));
     }
 
     services::AuthService &auth_service()

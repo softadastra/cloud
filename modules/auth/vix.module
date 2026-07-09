@@ -14,5 +14,6 @@ registry = [
 
 links = [
   "rix::rix",
+  "vix::db",
 ]
 

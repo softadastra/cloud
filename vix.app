@@ -48,11 +48,13 @@ packages = [
 
 links = [
   "vix::vix",
+  "vix::db",
 ]
 
 resources = [
   ".env=.env",
   "storage=storage",
+  "migrations=migrations",
 ]
 
 [module.auth]

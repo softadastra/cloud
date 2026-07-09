@@ -15,23 +15,23 @@ namespace cloud::presentation::controllers
     {
       (void)req;
 
-      res.json({
-        "ok", true,
-        "status", "ok",
-        "service", "cloud"
-      });
+      res.json(vix::json::o(
+          "ok", true,
+          "data", vix::json::o(
+              "status", "ok",
+              "service", "cloud")));
     });
 
     app.get("/api/health", [](vix::Request &req, vix::Response &res)
     {
       (void)req;
 
-      res.json({
-        "ok", true,
-        "status", "ok",
-        "service", "cloud",
-        "api", true
-      });
+      res.json(vix::json::o(
+          "ok", true,
+          "data", vix::json::o(
+              "status", "ok",
+              "service", "cloud",
+              "api", true)));
     });
   }
 } // namespace cloud::presentation::controllers

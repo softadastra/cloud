@@ -9,6 +9,7 @@ registry = [
 ]
 
 links = [
+  "vix::db",
 ]
 
 [tests]

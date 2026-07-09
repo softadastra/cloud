@@ -63,7 +63,8 @@ namespace cloud::workspaces::controllers
       res.json(
           vix::json::o(
               "ok", true,
-              "message", message));
+              "data", vix::json::o(
+                  "message", message)));
     }
 
     bool require_json_object(

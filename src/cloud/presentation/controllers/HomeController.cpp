@@ -15,11 +15,11 @@ namespace cloud::presentation::controllers
     {
       (void)req;
 
-      res.json({
-        "ok", true,
-        "service", "cloud",
-        "message", "Vix backend is running"
-      });
+      res.json(vix::json::o(
+          "ok", true,
+          "data", vix::json::o(
+              "service", "cloud",
+              "message", "Vix backend is running")));
     });
   }
 } // namespace cloud::presentation::controllers

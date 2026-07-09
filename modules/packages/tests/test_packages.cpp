@@ -14,6 +14,7 @@
  */
 #include <packages/PackagesModule.hpp>
 #include <packages/services/PackageService.hpp>
+#include <packages/support/PackageErrors.hpp>
 
 #include <string>
 
@@ -103,7 +104,13 @@ int main()
                           auto second = service.create_package(request);
 
                           Assert::equal(first.ok(), true);
-                          Assert::equal(second.failed(), true); }));
+                          Assert::equal(second.failed(), true);
+                          Assert::equal(
+                              cloud::packages::support::http_status_for_package_error(second.error()),
+                              409);
+                          Assert::equal(
+                              cloud::packages::support::public_code_for_package_error(second.error()),
+                              std::string("package_already_exists")); }));
 
   registry.add(TestCase("package service allows same package name in different workspaces", []
                         {
@@ -185,6 +192,24 @@ int main()
                           Assert::equal(
                               found.value().id,
                               created.value().id); }));
+
+  registry.add(TestCase("package service returns not found for missing package", []
+                        {
+                          cloud::packages::services::PackageService service;
+
+                          cloud::packages::dto::PackageLookupRequest lookup;
+                          lookup.id = "package_missing";
+                          lookup.workspace_id = "workspace_123";
+
+                          auto found = service.find_package(lookup);
+
+                          Assert::equal(found.failed(), true);
+                          Assert::equal(
+                              cloud::packages::support::http_status_for_package_error(found.error()),
+                              404);
+                          Assert::equal(
+                              cloud::packages::support::public_code_for_package_error(found.error()),
+                              std::string("package_not_found")); }));
 
   registry.add(TestCase("package service updates package", []
                         {

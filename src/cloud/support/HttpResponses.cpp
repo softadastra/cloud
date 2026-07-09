@@ -36,7 +36,9 @@ namespace cloud::support
   {
     res.json({
       "ok", true,
-      "message", message
+      "data", {
+        "message", message
+      }
     });
   }
 } // namespace cloud::support
