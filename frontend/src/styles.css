@@ -22,7 +22,9 @@ a {
 }
 
 button,
-input {
+input,
+textarea,
+select {
   font: inherit;
 }
 
@@ -438,4 +440,15 @@ select {
   .meta-grid {
     grid-template-columns: 1fr;
   }
+}
+
+textarea {
+  width: 100%;
+  border: 1px solid #cfd6df;
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: #fff;
+  color: #20242a;
+  font: inherit;
+  resize: vertical;
 }
