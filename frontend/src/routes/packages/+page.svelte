@@ -2,8 +2,12 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import {
+    archivePackage,
+    changePackageVisibility,
     createPackage,
-    listPackages
+    deletePackage,
+    listPackages,
+    reactivatePackage
   } from '$lib/api/packages';
   import { listWorkspaces } from '$lib/api/workspaces';
   import {
@@ -33,6 +37,9 @@
 
   let loading = true;
   let saving = false;
+  let busyPackageId = '';
+  let initialized = false;
+  let packageRequestId = 0;
   let error = '';
   let success = '';
 
@@ -54,6 +61,18 @@
     selectedWorkspace?.current_user_role ?? 'viewer';
 
   $: canCreate = canCreatePackage(currentRole);
+
+  $: globalWorkspaceId =
+    $workspaceContext.selectedWorkspace?.id ?? '';
+
+  $: if (
+    initialized &&
+    globalWorkspaceId &&
+    globalWorkspaceId !== selectedWorkspaceId &&
+    workspaces.some((workspace) => workspace.id === globalWorkspaceId)
+  ) {
+    void switchWorkspace(globalWorkspaceId);
+  }
 
   $: activePackages = packages.filter(
     (pkg) => pkg.active !== false
@@ -121,9 +140,17 @@
   }
 
   function packageStatus(pkg: Package) {
-    return pkg.active === false
-      ? 'archived'
-      : 'active';
+    return pkg.status || (pkg.active === false ? 'archived' : 'active');
+  }
+
+  function canWritePackages() {
+    return canCreate;
+  }
+
+  function syncPackage(updated: Package) {
+    packages = packages.map((pkg) =>
+      pkg.id === updated.id ? updated : pkg
+    );
   }
 
   function resetForm() {
@@ -207,6 +234,7 @@
       );
 
       await loadPackages(selectedWorkspaceId);
+      initialized = true;
     } catch (err) {
       error =
         err instanceof ApiError
@@ -218,6 +246,8 @@
   }
 
   async function loadPackages(workspaceId: string) {
+    const requestId = ++packageRequestId;
+
     if (!workspaceId) {
       packages = [];
       return;
@@ -227,11 +257,105 @@
 
     const data = await listPackages(workspaceId);
 
-    if (workspaceId !== selectedWorkspaceId) {
+    if (
+      requestId !== packageRequestId ||
+      workspaceId !== selectedWorkspaceId
+    ) {
       return;
     }
 
     packages = data.packages;
+  }
+
+  async function switchWorkspace(workspaceId: string) {
+    selectedWorkspaceId = workspaceId;
+    packages = [];
+    showForm = false;
+    packageQuery = '';
+    packageFilter = 'all';
+    error = '';
+    success = '';
+    loading = true;
+
+    const url = new URL(window.location.href);
+    url.searchParams.set('workspace_id', workspaceId);
+    history.replaceState(null, '', `${url.pathname}${url.search}`);
+
+    try {
+      await loadPackages(workspaceId);
+    } catch (err) {
+      error =
+        err instanceof ApiError
+          ? err.message
+          : 'Unable to load packages.';
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function handlePackageAction(event: MouseEvent, pkg: Package, action: 'archive' | 'reactivate' | 'delete' | 'public' | 'private') {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (!selectedWorkspaceId || !canWritePackages()) {
+      return;
+    }
+
+    const message =
+      action === 'delete'
+        ? `Delete package ${pkg.name}? Versions and archives are kept for safety.`
+        : action === 'archive'
+          ? `Archive package ${pkg.name}?`
+          : action === 'reactivate'
+            ? `Reactivate package ${pkg.name}?`
+            : action === 'public'
+              ? `Make package ${pkg.name} public?`
+              : `Make package ${pkg.name} private? It will disappear from public profiles and pins.`;
+
+    if (!window.confirm(message)) {
+      return;
+    }
+
+    busyPackageId = pkg.id;
+    error = '';
+    success = '';
+
+    try {
+      const updated =
+        action === 'archive'
+          ? await archivePackage(selectedWorkspaceId, pkg.id)
+          : action === 'reactivate'
+            ? await reactivatePackage(selectedWorkspaceId, pkg.id)
+            : action === 'delete'
+              ? await deletePackage(selectedWorkspaceId, pkg.id)
+              : await changePackageVisibility(
+                  selectedWorkspaceId,
+                  pkg.id,
+                  action === 'public' ? 'public' : 'private'
+                );
+
+      if (action === 'delete') {
+        packages = packages.filter((item) => item.id !== pkg.id);
+      } else {
+        syncPackage(updated.package);
+      }
+
+      success =
+        action === 'archive'
+          ? 'Package archived.'
+          : action === 'reactivate'
+            ? 'Package reactivated.'
+            : action === 'delete'
+              ? 'Package deleted.'
+              : 'Package visibility changed.';
+    } catch (err) {
+      error =
+        err instanceof ApiError
+          ? err.message
+          : 'Unable to update package.';
+    } finally {
+      busyPackageId = '';
+    }
   }
 
   async function submitPackage() {
@@ -545,7 +669,7 @@
         <span>Repository</span>
         <span>Visibility</span>
         <span>Status</span>
-        <span aria-hidden="true"></span>
+        <span>Actions</span>
       </div>
 
       {#each visiblePackages as pkg (pkg.id)}
@@ -606,13 +730,44 @@
             <StatusBadge status={packageStatus(pkg)} />
           </div>
 
-          <svg
-            class="row-arrow"
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-          >
-            <path d="m9 18 6-6-6-6"></path>
-          </svg>
+          <div class="package-row-actions">
+            {#if canWritePackages()}
+              <button
+                type="button"
+                disabled={busyPackageId === pkg.id}
+                onclick={(event) =>
+                  handlePackageAction(
+                    event,
+                    pkg,
+                    pkg.visibility === 'public' ? 'private' : 'public'
+                  )}
+              >
+                {pkg.visibility === 'public' ? 'Make private' : 'Make public'}
+              </button>
+
+              <button
+                type="button"
+                disabled={busyPackageId === pkg.id}
+                onclick={(event) =>
+                  handlePackageAction(
+                    event,
+                    pkg,
+                    packageStatus(pkg) === 'archived' ? 'reactivate' : 'archive'
+                  )}
+              >
+                {packageStatus(pkg) === 'archived' ? 'Reactivate' : 'Archive'}
+              </button>
+
+              <button
+                class="danger-link"
+                type="button"
+                disabled={busyPackageId === pkg.id}
+                onclick={(event) => handlePackageAction(event, pkg, 'delete')}
+              >
+                Delete
+              </button>
+            {/if}
+          </div>
         </a>
       {/each}
     </div>
@@ -901,7 +1056,7 @@
       minmax(180px, 0.85fr)
       minmax(95px, 0.4fr)
       minmax(90px, 0.4fr)
-      18px;
+      minmax(220px, 0.8fr);
     gap: 16px;
     align-items: center;
   }
@@ -1024,16 +1179,6 @@
     color: var(--info);
   }
 
-  .row-arrow {
-    width: 16px;
-    height: 16px;
-    fill: none;
-    stroke: var(--link);
-    stroke-width: 1.7;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
-
   .loading-state {
     min-height: 90px;
     padding: 22px 16px;
@@ -1070,6 +1215,41 @@
     font-size: 10.5px;
   }
 
+
+  .package-row-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+
+  .package-row-actions button {
+    min-height: 28px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--bg-elevated);
+    padding: 0 8px;
+    color: var(--text-strong);
+    font-size: 10.5px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .package-row-actions button:hover:not(:disabled) {
+    border-color: var(--line-strong);
+    background: var(--bg-panel);
+  }
+
+  .package-row-actions button:disabled {
+    cursor: wait;
+    opacity: 0.6;
+  }
+
+  .package-row-actions .danger-link {
+    border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+    color: var(--danger);
+  }
+
   @media (max-width: 960px) {
     .table-heading,
     .package-row {
@@ -1078,7 +1258,7 @@
         minmax(150px, 0.8fr)
         minmax(90px, 0.4fr)
         minmax(85px, 0.4fr)
-        18px;
+        minmax(200px, 0.8fr);
       gap: 12px;
     }
   }
@@ -1101,14 +1281,15 @@
     }
 
     .package-row {
-      grid-template-columns: minmax(0, 1fr) 18px;
+      grid-template-columns: minmax(0, 1fr);
       gap: 12px;
       padding: 14px;
     }
 
     .repository-cell,
     .visibility-cell,
-    .status-cell {
+    .status-cell,
+    .package-row-actions {
       grid-column: 1 / -1;
       display: grid;
       grid-template-columns: 94px minmax(0, 1fr);
@@ -1125,9 +1306,9 @@
       font-size: 10px;
     }
 
-    .row-arrow {
-      grid-column: 2;
-      grid-row: 1;
+    .package-row-actions {
+      justify-content: flex-start;
+      padding-left: 45px;
     }
   }
 
@@ -1172,7 +1353,8 @@
 
     .repository-cell,
     .visibility-cell,
-    .status-cell {
+    .status-cell,
+    .package-row-actions {
       grid-template-columns: 1fr;
       gap: 4px;
       padding-left: 45px;

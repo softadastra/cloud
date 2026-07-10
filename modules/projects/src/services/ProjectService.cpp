@@ -168,6 +168,9 @@ namespace cloud::projects::services
       project.active = row.getInt64(8) != 0;
       project.created_at = row.getInt64(9);
       project.updated_at = row.getInt64(10);
+      project.status = row.getString(11);
+      project.archived_at = row.getInt64(12);
+      project.deleted_at = row.getInt64(13);
       return project;
     }
 
@@ -276,11 +279,12 @@ namespace cloud::projects::services
         project.active = true;
         project.created_at = timestamp;
         project.updated_at = timestamp;
+        project.status = "active";
 
         impl_->db->exec(
             "INSERT INTO projects "
-            "(id, workspace_id, owner_user_id, name, slug, description, repository_url, default_branch, active, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "(id, workspace_id, owner_user_id, name, slug, description, repository_url, default_branch, active, created_at, updated_at, status) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             project.id,
             project.workspace_id,
             project.owner_user_id,
@@ -291,7 +295,8 @@ namespace cloud::projects::services
             project.default_branch,
             static_cast<std::int64_t>(project.active ? 1 : 0),
             project.created_at,
-            project.updated_at);
+            project.updated_at,
+            std::string{"active"});
 
         return ProjectResult<dto::ProjectResponse>::success(project);
       }
@@ -326,6 +331,7 @@ namespace cloud::projects::services
     project.active = true;
     project.created_at = timestamp;
     project.updated_at = timestamp;
+    project.status = "active";
 
     impl_->project_id_by_workspace_slug[key] = project.id;
     impl_->projects_by_id[project.id] = project;
@@ -462,8 +468,8 @@ namespace cloud::projects::services
     if (impl_->persistent())
     {
       auto rows = impl_->db->query(
-          "SELECT id, workspace_id, owner_user_id, name, slug, description, repository_url, default_branch, active, created_at, updated_at "
-          "FROM projects WHERE id = ? AND workspace_id = ? LIMIT 1",
+          "SELECT id, workspace_id, owner_user_id, name, slug, description, repository_url, default_branch, active, created_at, updated_at, COALESCE(status, 'active'), COALESCE(archived_at, 0), COALESCE(deleted_at, 0) "
+          "FROM projects WHERE id = ? AND workspace_id = ? AND COALESCE(status, 'active') != 'deleted' LIMIT 1",
           request.id,
           request.workspace_id);
 
@@ -489,6 +495,53 @@ namespace cloud::projects::services
     return ProjectResult<dto::ProjectResponse>::success(item->second);
   }
 
+
+
+  ProjectResult<dto::ProjectResponse> ProjectService::set_status(
+      const dto::ProjectLookupRequest &request,
+      const std::string &status)
+  {
+    if (status != "active" && status != "archived" && status != "deleted")
+    {
+      return ProjectResult<dto::ProjectResponse>::failure({support::ProjectErrorCode::InvalidName,
+                                                           "Project status is invalid."});
+    }
+
+    auto current = find_project(request);
+
+    if (current.failed())
+    {
+      return current;
+    }
+
+    auto project = current.value();
+    const auto timestamp = now_timestamp();
+    project.status = status;
+    project.active = status == "active";
+    project.updated_at = timestamp;
+    project.archived_at = status == "archived" ? timestamp : 0;
+    project.deleted_at = status == "deleted" ? timestamp : 0;
+
+    if (impl_->persistent())
+    {
+      impl_->db->exec(
+          "UPDATE projects SET status = ?, active = ?, archived_at = ?, deleted_at = ?, updated_at = ? WHERE id = ? AND workspace_id = ?",
+          project.status,
+          static_cast<std::int64_t>(project.active ? 1 : 0),
+          project.archived_at,
+          project.deleted_at,
+          project.updated_at,
+          project.id,
+          project.workspace_id);
+    }
+    else
+    {
+      impl_->projects_by_id[project.id] = project;
+    }
+
+    return ProjectResult<dto::ProjectResponse>::success(project);
+  }
+
   ProjectResult<std::vector<dto::ProjectResponse>> ProjectService::list_projects(
       const dto::ListProjectsRequest &request) const
   {
@@ -505,8 +558,8 @@ namespace cloud::projects::services
       if (request.access_scope == "selected_projects")
       {
         auto rows = impl_->db->query(
-            "SELECT id, workspace_id, owner_user_id, name, slug, description, repository_url, default_branch, active, created_at, updated_at "
-            "FROM projects WHERE workspace_id = ? AND instr(?, char(34) || id || char(34)) > 0 ORDER BY created_at",
+            "SELECT id, workspace_id, owner_user_id, name, slug, description, repository_url, default_branch, active, created_at, updated_at, COALESCE(status, 'active'), COALESCE(archived_at, 0), COALESCE(deleted_at, 0) "
+            "FROM projects WHERE workspace_id = ? AND instr(?, char(34) || id || char(34)) > 0 AND COALESCE(status, 'active') != 'deleted' ORDER BY created_at",
             request.workspace_id,
             request.project_ids_json);
 
@@ -518,8 +571,8 @@ namespace cloud::projects::services
       else
       {
         auto rows = impl_->db->query(
-            "SELECT id, workspace_id, owner_user_id, name, slug, description, repository_url, default_branch, active, created_at, updated_at "
-            "FROM projects WHERE workspace_id = ? ORDER BY created_at",
+            "SELECT id, workspace_id, owner_user_id, name, slug, description, repository_url, default_branch, active, created_at, updated_at, COALESCE(status, 'active'), COALESCE(archived_at, 0), COALESCE(deleted_at, 0) "
+            "FROM projects WHERE workspace_id = ? AND COALESCE(status, 'active') != 'deleted' ORDER BY created_at",
             request.workspace_id);
 
         while (rows->next())

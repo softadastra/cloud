@@ -32,6 +32,12 @@ namespace cloud::workspaces::dto
     std::string current_user_status;
     std::string access_scope;
     std::string project_ids_json;
+    std::string status{"active"};
+    std::string avatar_url;
+    std::string avatar_storage_path;
+    std::int64_t avatar_updated_at{0};
+    std::int64_t suspended_at{0};
+    std::int64_t deleted_at{0};
     bool current_user_is_owner{false};
     bool active{true};
     std::int64_t created_at{0};
@@ -50,6 +56,12 @@ namespace cloud::workspaces::dto
           "project_ids_json", project_ids_json,
           "current_user_is_owner", current_user_is_owner,
           "active", active,
+          "status", status,
+          "avatar_url", avatar_url,
+          "avatar_storage_path", avatar_storage_path,
+          "avatar_updated_at", avatar_updated_at,
+          "suspended_at", suspended_at,
+          "deleted_at", deleted_at,
           "created_at", created_at,
           "updated_at", updated_at);
     }

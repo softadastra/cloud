@@ -1,10 +1,19 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import { browser } from '$app/environment';
   import { onMount } from 'svelte';
   import { listMembers } from '$lib/api/members';
   import { listProjects } from '$lib/api/projects';
   import { listTokens } from '$lib/api/tokens';
-  import { listWorkspaces } from '$lib/api/workspaces';
+  import {
+    deleteWorkspace,
+    deleteWorkspaceAvatar,
+    listWorkspaces,
+    reactivateWorkspace,
+    suspendWorkspace,
+    updateWorkspace,
+    uploadWorkspaceAvatar
+  } from '$lib/api/workspaces';
   import {
     ApiError,
     type CliToken,
@@ -24,6 +33,10 @@
   import { auth } from '$lib/stores/auth';
   import { workspaceContext } from '$lib/stores/workspace';
 
+  const API_BASE_URL =
+    import.meta.env.VITE_API_BASE_URL ??
+    (browser ? `${window.location.protocol}//${window.location.hostname}:8080` : '');
+
   let workspaces: Workspace[] = [];
   let selectedWorkspace: Workspace | null = null;
 
@@ -37,7 +50,13 @@
 
   let loading = true;
   let loadingDetail = false;
+  let savingSettings = false;
+  let uploadingAvatar = false;
   let error = '';
+  let success = '';
+
+  let editName = '';
+  let editSlug = '';
 
   $: currentRole =
     selectedWorkspace?.current_user_role ?? 'viewer';
@@ -94,9 +113,7 @@
   }
 
   function workspaceStatus(workspace: Workspace) {
-    return workspace.active === false
-      ? 'Inactive'
-      : 'Active';
+    return workspace.status || (workspace.active === false ? 'inactive' : 'active');
   }
 
   function tokenStatus(token: CliToken) {
@@ -105,6 +122,36 @@
 
   function workspaceInitial(workspace: Workspace) {
     return workspace.name.slice(0, 1).toUpperCase();
+  }
+
+  function workspaceAvatarUrl(workspace: Workspace) {
+    if (!workspace.avatar_url) {
+      return '';
+    }
+
+    return workspace.avatar_url.startsWith('http')
+      ? workspace.avatar_url
+      : `${API_BASE_URL}${workspace.avatar_url}`;
+  }
+
+  function canManageWorkspace() {
+    return currentRole === 'owner' || currentRole === 'admin';
+  }
+
+  function canOwnWorkspace() {
+    return currentRole === 'owner';
+  }
+
+  function syncWorkspace(updated: Workspace | null) {
+    if (!updated) {
+      return;
+    }
+
+    workspaces = workspaces.map((workspace) =>
+      workspace.id === updated.id ? updated : workspace
+    );
+    selectedWorkspace = updated;
+    workspaceContext.setWorkspaces(workspaces, updated.id);
   }
 
   function updateWorkspaceUrl(workspaceId: string) {
@@ -192,6 +239,11 @@
         selectedWorkspace?.id ?? ''
       );
 
+      if (selectedWorkspace) {
+        editName = selectedWorkspace.name;
+        editSlug = selectedWorkspace.slug;
+      }
+
       await loadDetail(selectedWorkspace);
     } catch (err) {
       error =
@@ -212,13 +264,154 @@
     }
 
     selectedWorkspace = workspace;
+    editName = workspace.name;
+    editSlug = workspace.slug;
     copiedWorkspaceId = false;
     error = '';
+    success = '';
 
     workspaceContext.setSelectedWorkspace(workspace.id);
     updateWorkspaceUrl(workspace.id);
 
     await loadDetail(workspace);
+  }
+
+  async function saveWorkspaceSettings() {
+    if (!selectedWorkspace || !canManageWorkspace()) {
+      return;
+    }
+
+    savingSettings = true;
+    error = '';
+    success = '';
+
+    try {
+      const updated = await updateWorkspace({
+        id: selectedWorkspace.id,
+        name: editName.trim(),
+        slug: editSlug.trim()
+      });
+
+      syncWorkspace(updated.workspace);
+      success = 'Workspace updated.';
+    } catch (err) {
+      error =
+        err instanceof ApiError
+          ? err.message
+          : 'Unable to update workspace.';
+    } finally {
+      savingSettings = false;
+    }
+  }
+
+  async function handleAvatarUpload(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+
+    if (!selectedWorkspace || !file || !canManageWorkspace()) {
+      return;
+    }
+
+    uploadingAvatar = true;
+    error = '';
+    success = '';
+
+    try {
+      const updated = await uploadWorkspaceAvatar(selectedWorkspace.id, file);
+      syncWorkspace(updated.workspace);
+      success = 'Workspace avatar updated.';
+    } catch (err) {
+      error =
+        err instanceof ApiError
+          ? err.message
+          : 'Unable to upload workspace avatar.';
+    } finally {
+      uploadingAvatar = false;
+      input.value = '';
+    }
+  }
+
+  async function removeAvatar() {
+    if (!selectedWorkspace || !canManageWorkspace()) {
+      return;
+    }
+
+    uploadingAvatar = true;
+    error = '';
+    success = '';
+
+    try {
+      await deleteWorkspaceAvatar(selectedWorkspace.id);
+      syncWorkspace({
+        ...selectedWorkspace,
+        avatar_url: '',
+        avatar_storage_path: '',
+        avatar_updated_at: 0
+      });
+      success = 'Workspace avatar removed.';
+    } catch (err) {
+      error =
+        err instanceof ApiError
+          ? err.message
+          : 'Unable to remove workspace avatar.';
+    } finally {
+      uploadingAvatar = false;
+    }
+  }
+
+  async function changeWorkspaceState(action: 'suspend' | 'reactivate' | 'delete') {
+    if (!selectedWorkspace || !canOwnWorkspace()) {
+      return;
+    }
+
+    const message =
+      action === 'delete'
+        ? `Delete workspace ${selectedWorkspace.name}? Existing records will be kept for safety.`
+        : action === 'suspend'
+          ? `Suspend workspace ${selectedWorkspace.name}? Write actions should stop until it is reactivated.`
+          : `Reactivate workspace ${selectedWorkspace.name}?`;
+
+    if (!window.confirm(message)) {
+      return;
+    }
+
+    savingSettings = true;
+    error = '';
+    success = '';
+
+    try {
+      const updated =
+        action === 'delete'
+          ? await deleteWorkspace(selectedWorkspace.id)
+          : action === 'suspend'
+            ? await suspendWorkspace(selectedWorkspace.id)
+            : await reactivateWorkspace(selectedWorkspace.id);
+
+      if (action === 'delete') {
+        workspaces = workspaces.filter((workspace) => workspace.id !== selectedWorkspace?.id);
+        selectedWorkspace = workspaces[0] ?? null;
+        workspaceContext.setWorkspaces(workspaces, selectedWorkspace?.id ?? '');
+        if (selectedWorkspace) {
+          await loadDetail(selectedWorkspace);
+        }
+      } else {
+        syncWorkspace(updated.workspace);
+      }
+
+      success =
+        action === 'delete'
+          ? 'Workspace deleted.'
+          : action === 'suspend'
+            ? 'Workspace suspended.'
+            : 'Workspace reactivated.';
+    } catch (err) {
+      error =
+        err instanceof ApiError
+          ? err.message
+          : `Unable to ${action} workspace.`;
+    } finally {
+      savingSettings = false;
+    }
   }
 
   async function loadDetail(
@@ -306,6 +499,12 @@
 
 <InlineError message={error} />
 
+{#if success}
+  <p class="success-message" role="status">
+    {success}
+  </p>
+{/if}
+
 <div class="workspace-layout">
   <aside
     class="workspace-directory"
@@ -368,7 +567,11 @@
             onclick={() => selectWorkspace(workspace)}
           >
             <span class="workspace-option__mark">
-              {workspaceInitial(workspace)}
+              {#if workspaceAvatarUrl(workspace)}
+                <img src={workspaceAvatarUrl(workspace)} alt="" aria-hidden="true" />
+              {:else}
+                {workspaceInitial(workspace)}
+              {/if}
             </span>
 
             <span class="workspace-option__content">
@@ -407,7 +610,11 @@
         <div class="workspace-overview__header">
           <div class="workspace-identity">
             <span class="workspace-mark">
-              {workspaceInitial(selectedWorkspace)}
+              {#if workspaceAvatarUrl(selectedWorkspace)}
+                <img src={workspaceAvatarUrl(selectedWorkspace)} alt="" aria-hidden="true" />
+              {:else}
+                {workspaceInitial(selectedWorkspace)}
+              {/if}
             </span>
 
             <div>
@@ -555,6 +762,128 @@
           message="Your role can review this workspace, but cannot make administrative changes."
         />
       {/if}
+
+      {#if canManageWorkspace()}
+        <section
+          class="detail-section workspace-settings-section"
+          aria-labelledby="workspace-settings-title"
+        >
+          <div class="section-header">
+            <div>
+              <h2 id="workspace-settings-title">Workspace settings</h2>
+              <p>Update the workspace identity and logo.</p>
+            </div>
+          </div>
+
+          <div class="workspace-settings-grid">
+            <div class="avatar-control">
+              <span class="workspace-mark workspace-mark--large">
+                {#if workspaceAvatarUrl(selectedWorkspace)}
+                  <img src={workspaceAvatarUrl(selectedWorkspace)} alt="" aria-hidden="true" />
+                {:else}
+                  {workspaceInitial(selectedWorkspace)}
+                {/if}
+              </span>
+
+              <div>
+                <label class="avatar-upload-button">
+                  <span>{uploadingAvatar ? 'Uploading...' : 'Upload logo'}</span>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    disabled={uploadingAvatar}
+                    onchange={handleAvatarUpload}
+                  />
+                </label>
+
+                {#if selectedWorkspace.avatar_url}
+                  <button
+                    class="secondary-button"
+                    type="button"
+                    disabled={uploadingAvatar}
+                    onclick={removeAvatar}
+                  >
+                    Remove logo
+                  </button>
+                {/if}
+
+                <p>JPG, PNG or WebP. Max 2MB.</p>
+              </div>
+            </div>
+
+            <form
+              class="workspace-settings-form"
+              onsubmit={(event) => {
+                event.preventDefault();
+                void saveWorkspaceSettings();
+              }}
+            >
+              <label>
+                Name
+                <input bind:value={editName} required autocomplete="off" />
+              </label>
+
+              <label>
+                Slug
+                <input bind:value={editSlug} required autocomplete="off" />
+              </label>
+
+              <button
+                type="submit"
+                disabled={savingSettings || !editName.trim() || !editSlug.trim()}
+              >
+                {savingSettings ? 'Saving...' : 'Save changes'}
+              </button>
+            </form>
+          </div>
+        </section>
+      {/if}
+
+      {#if canOwnWorkspace()}
+        <section
+          class="detail-section danger-zone"
+          aria-labelledby="workspace-danger-title"
+        >
+          <div class="section-header">
+            <div>
+              <h2 id="workspace-danger-title">Danger zone</h2>
+              <p>Suspending stops write actions. Deleting hides the workspace from normal use while keeping records for safety.</p>
+            </div>
+          </div>
+
+          <div class="danger-actions">
+            {#if workspaceStatus(selectedWorkspace) === 'suspended'}
+              <button
+                class="secondary-button"
+                type="button"
+                disabled={savingSettings}
+                onclick={() => changeWorkspaceState('reactivate')}
+              >
+                Reactivate workspace
+              </button>
+            {:else}
+              <button
+                class="secondary-button"
+                type="button"
+                disabled={savingSettings}
+                onclick={() => changeWorkspaceState('suspend')}
+              >
+                Suspend workspace
+              </button>
+            {/if}
+
+            <button
+              class="danger-button"
+              type="button"
+              disabled={savingSettings}
+              onclick={() => changeWorkspaceState('delete')}
+            >
+              Delete workspace
+            </button>
+          </div>
+        </section>
+      {/if}
+
 
       <div class="workspace-content-grid">
         <section

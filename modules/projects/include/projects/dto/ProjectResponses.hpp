@@ -32,7 +32,10 @@ namespace cloud::projects::dto
     std::string description;
     std::string repository_url;
     std::string default_branch;
+    std::string status{"active"};
     bool active{true};
+    std::int64_t archived_at{0};
+    std::int64_t deleted_at{0};
     std::int64_t created_at{0};
     std::int64_t updated_at{0};
 
@@ -47,7 +50,10 @@ namespace cloud::projects::dto
           "description", description,
           "repository_url", repository_url,
           "default_branch", default_branch,
+          "status", status,
           "active", active,
+          "archived_at", archived_at,
+          "deleted_at", deleted_at,
           "created_at", created_at,
           "updated_at", updated_at);
     }

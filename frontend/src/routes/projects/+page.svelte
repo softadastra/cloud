@@ -9,8 +9,11 @@
     listPackages
   } from '$lib/api/packages';
   import {
+    archiveProject,
     createProject,
-    listProjects
+    deleteProject,
+    listProjects,
+    reactivateProject
   } from '$lib/api/projects';
   import { listWorkspaces } from '$lib/api/workspaces';
   import {
@@ -49,8 +52,11 @@
 
   let loading = true;
   let loadingDetail = false;
+  let initialized = false;
+  let projectRequestId = 0;
   let savingProject = false;
   let savingPackage = false;
+  let busyProjectAction = false;
 
   let showProjectForm = false;
   let showPackageForm = false;
@@ -79,6 +85,18 @@
 
   $: canCreate = canCreateProject(currentRole);
   $: canPublish = canCreatePackage(currentRole);
+
+  $: globalWorkspaceId =
+    $workspaceContext.selectedWorkspace?.id ?? '';
+
+  $: if (
+    initialized &&
+    globalWorkspaceId &&
+    globalWorkspaceId !== selectedWorkspaceId &&
+    workspaces.some((workspace) => workspace.id === globalWorkspaceId)
+  ) {
+    void switchWorkspace(globalWorkspaceId);
+  }
 
   $: effectiveSlug = slugTouched
     ? slugify(projectSlug)
@@ -122,6 +140,10 @@
     return value.length > length
       ? `${value.slice(0, length)}…`
       : value;
+  }
+
+  function projectStatus(project: Project) {
+    return project.status || (project.active === false ? 'archived' : 'active');
   }
 
   function projectInitial(project: Project) {
@@ -281,6 +303,7 @@
       );
 
       await loadProjects(params.get('project_id'));
+      initialized = true;
     } catch (err) {
       error =
         err instanceof ApiError
@@ -294,6 +317,8 @@
   async function loadProjects(
     requestedProjectId?: string | null
   ) {
+    const requestId = ++projectRequestId;
+
     if (!selectedWorkspaceId) {
       projects = [];
       selectedProject = null;
@@ -304,6 +329,13 @@
     const data = await listProjects(
       selectedWorkspaceId
     );
+
+    if (
+      requestId !== projectRequestId ||
+      data.projects.some((project) => project.workspace_id !== selectedWorkspaceId)
+    ) {
+      return;
+    }
 
     projects = data.projects;
 
@@ -324,6 +356,36 @@
     }
 
     await loadProjectDetail(selectedProject);
+  }
+
+  async function switchWorkspace(workspaceId: string) {
+    selectedWorkspaceId = workspaceId;
+    projects = [];
+    selectedProject = null;
+    clearProjectDetail();
+    showProjectForm = false;
+    showPackageForm = false;
+    projectQuery = '';
+    copiedProjectId = false;
+    error = '';
+    success = '';
+    loading = true;
+
+    const url = new URL(window.location.href);
+    url.searchParams.set('workspace_id', workspaceId);
+    url.searchParams.delete('project_id');
+    history.replaceState(null, '', `${url.pathname}${url.search}`);
+
+    try {
+      await loadProjects();
+    } catch (err) {
+      error =
+        err instanceof ApiError
+          ? err.message
+          : 'Unable to load projects.';
+    } finally {
+      loading = false;
+    }
   }
 
   function clearProjectDetail() {
@@ -417,6 +479,62 @@
       if (requestId === detailRequestId) {
         loadingDetail = false;
       }
+    }
+  }
+
+  async function handleProjectAction(action: 'archive' | 'reactivate' | 'delete') {
+    if (!selectedProject || !selectedWorkspaceId || !canCreate) {
+      return;
+    }
+
+    const message =
+      action === 'delete'
+        ? `Delete project ${selectedProject.name}? Build reports and lockfiles are kept for safety.`
+        : action === 'archive'
+          ? `Archive project ${selectedProject.name}?`
+          : `Reactivate project ${selectedProject.name}?`;
+
+    if (!window.confirm(message)) {
+      return;
+    }
+
+    busyProjectAction = true;
+    error = '';
+    success = '';
+
+    try {
+      const updated =
+        action === 'delete'
+          ? await deleteProject(selectedWorkspaceId, selectedProject.id)
+          : action === 'archive'
+            ? await archiveProject(selectedWorkspaceId, selectedProject.id)
+            : await reactivateProject(selectedWorkspaceId, selectedProject.id);
+
+      if (action === 'delete') {
+        projects = projects.filter((project) => project.id !== selectedProject?.id);
+        selectedProject = projects[0] ?? null;
+        updateProjectUrl(selectedProject?.id ?? '');
+        await loadProjectDetail(selectedProject);
+      } else {
+        selectedProject = updated.project;
+        projects = projects.map((project) =>
+          project.id === updated.project.id ? updated.project : project
+        );
+      }
+
+      success =
+        action === 'delete'
+          ? 'Project deleted.'
+          : action === 'archive'
+            ? 'Project archived.'
+            : 'Project reactivated.';
+    } catch (err) {
+      error =
+        err instanceof ApiError
+          ? err.message
+          : 'Unable to update project.';
+    } finally {
+      busyProjectAction = false;
     }
   }
 
@@ -757,6 +875,8 @@
                   {selectedProject.name}
                 </h2>
 
+                <StatusBadge status={projectStatus(selectedProject)} />
+
                 {#if !canCreate}
                   <span class="neutral-badge">
                     Read only
@@ -768,16 +888,49 @@
             </div>
           </div>
 
-          <a
-            class="primary-link"
-            href={`/build-reports?workspace_id=${selectedWorkspaceId}&project_id=${selectedProject.id}`}
-          >
-            View build reports
+          <div class="project-header-actions">
+            {#if canCreate}
+              {#if projectStatus(selectedProject) === 'archived'}
+                <button
+                  class="secondary-button"
+                  type="button"
+                  disabled={busyProjectAction}
+                  onclick={() => handleProjectAction('reactivate')}
+                >
+                  Reactivate
+                </button>
+              {:else}
+                <button
+                  class="secondary-button"
+                  type="button"
+                  disabled={busyProjectAction}
+                  onclick={() => handleProjectAction('archive')}
+                >
+                  Archive
+                </button>
+              {/if}
 
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="m9 18 6-6-6-6"></path>
-            </svg>
-          </a>
+              <button
+                class="danger-button"
+                type="button"
+                disabled={busyProjectAction}
+                onclick={() => handleProjectAction('delete')}
+              >
+                Delete
+              </button>
+            {/if}
+
+            <a
+              class="primary-link"
+              href={`/build-reports?workspace_id=${selectedWorkspaceId}&project_id=${selectedProject.id}`}
+            >
+              View build reports
+
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m9 18 6-6-6-6"></path>
+              </svg>
+            </a>
+          </div>
         </div>
 
         <dl class="project-summary">
@@ -1590,6 +1743,39 @@
     font-size: 10px;
   }
 
+
+  .project-header-actions {
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .project-header-actions button {
+    min-height: 34px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--bg-elevated);
+    padding: 0 10px;
+    color: var(--text-strong);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .project-header-actions button:disabled {
+    cursor: wait;
+    opacity: 0.65;
+  }
+
+  .project-header-actions .danger-button {
+    border-color: color-mix(in srgb, var(--danger) 55%, var(--line));
+    background: color-mix(in srgb, var(--danger) 12%, transparent);
+    color: var(--danger);
+  }
+
   .primary-link,
   .section-link,
   .project-links a,
@@ -2004,6 +2190,10 @@
     .project-overview__header {
       align-items: flex-start;
       flex-direction: column;
+    }
+
+    .project-header-actions {
+      justify-content: flex-start;
     }
 
     .project-summary {

@@ -69,7 +69,7 @@
       )
     : [];
 
-  $: recentProjects = projectEntries.slice(0, 6);
+  $: recentProjects = currentWorkspaceProjects.slice(0, 6);
 
   $: recentNotifications =
     $notifications.notifications.slice(0, 6);

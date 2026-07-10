@@ -92,6 +92,18 @@ namespace cloud::workspaces::services
     WorkspaceResult<dto::WorkspaceResponse> find_workspace(
         const dto::WorkspaceLookupRequest &request) const;
 
+    WorkspaceResult<dto::WorkspaceResponse> update_avatar(
+        const std::string &workspace_id,
+        const std::string &avatar_url,
+        const std::string &avatar_storage_path);
+
+    WorkspaceResult<std::string> delete_avatar(
+        const std::string &workspace_id);
+
+    WorkspaceResult<dto::WorkspaceResponse> set_status(
+        const std::string &workspace_id,
+        const std::string &status);
+
     WorkspaceResult<std::vector<dto::WorkspaceResponse>> list_workspaces_for_owner(
         const std::string &owner_user_id) const;
 

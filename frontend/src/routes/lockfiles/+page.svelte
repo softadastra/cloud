@@ -30,6 +30,8 @@
 
   let loading = true;
   let loadingLockfiles = false;
+  let initialized = false;
+  let projectListRequestId = 0;
   let saving = false;
 
   let error = '';
@@ -64,6 +66,18 @@
     selectedWorkspace?.current_user_role ?? 'viewer';
 
   $: canUpload = canUploadLockfile(currentRole);
+
+  $: globalWorkspaceId =
+    $workspaceContext.selectedWorkspace?.id ?? '';
+
+  $: if (
+    initialized &&
+    globalWorkspaceId &&
+    globalWorkspaceId !== selectedWorkspaceId &&
+    workspaces.some((workspace) => workspace.id === globalWorkspaceId)
+  ) {
+    void switchWorkspace(globalWorkspaceId);
+  }
 
   $: visibleProjects = projects.filter((project) => {
     const query = projectQuery.trim().toLowerCase();
@@ -314,6 +328,7 @@
       await loadProjects(
         params.get('project_id')
       );
+      initialized = true;
     } catch (err) {
       error =
         err instanceof ApiError
@@ -330,34 +345,14 @@
     const select =
       event.currentTarget as HTMLSelectElement;
 
-    selectedWorkspaceId = select.value;
-
-    workspaceContext.setSelectedWorkspace(
-      selectedWorkspaceId
-    );
-
-    selectedProjectId = '';
-    projectQuery = '';
-    lockfileQuery = '';
-    sourceFilter = 'all';
-    openJsonId = '';
-    showUploadForm = false;
-
-    updatePageUrl();
-
-    try {
-      await loadProjects();
-    } catch (err) {
-      error =
-        err instanceof ApiError
-          ? err.message
-          : 'Unable to load workspace projects.';
-    }
+    await switchWorkspace(select.value);
   }
 
   async function loadProjects(
     requestedProjectId?: string | null
   ) {
+    const requestId = ++projectListRequestId;
+
     if (!selectedWorkspaceId) {
       projects = [];
       lockfiles = [];
@@ -372,6 +367,10 @@
     const data = await listProjects(
       selectedWorkspaceId
     );
+
+    if (requestId !== projectListRequestId) {
+      return;
+    }
 
     projects = data.projects;
 
@@ -391,6 +390,38 @@
     }
 
     await loadLockfiles(selectedProjectId);
+  }
+
+  async function switchWorkspace(workspaceId: string) {
+    selectedWorkspaceId = workspaceId;
+    selectedProjectId = '';
+    projects = [];
+    lockfiles = [];
+    projectQuery = '';
+    lockfileQuery = '';
+    sourceFilter = 'all';
+    openJsonId = '';
+    showUploadForm = false;
+    resetUploadForm();
+    error = '';
+    success = '';
+    loading = true;
+
+    const url = new URL(window.location.href);
+    url.searchParams.set('workspace_id', workspaceId);
+    url.searchParams.delete('project_id');
+    history.replaceState(null, '', `${url.pathname}${url.search}`);
+
+    try {
+      await loadProjects();
+    } catch (err) {
+      error =
+        err instanceof ApiError
+          ? err.message
+          : 'Unable to load lockfiles.';
+    } finally {
+      loading = false;
+    }
   }
 
   async function selectProject(project: Project) {

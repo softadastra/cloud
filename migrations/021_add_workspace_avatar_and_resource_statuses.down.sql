@@ -1,0 +1,3 @@
+-- SQLite deployments used by the MVP do not rely on destructive down migrations.
+-- Keep this migration reversible at the deployment level by restoring from backup
+-- before 021 if these columns must be removed.

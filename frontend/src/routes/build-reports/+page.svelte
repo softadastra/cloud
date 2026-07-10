@@ -31,6 +31,8 @@
 
   let loading = true;
   let loadingReports = false;
+  let initialized = false;
+  let projectListRequestId = 0;
   let saving = false;
 
   let error = '';
@@ -72,6 +74,18 @@
 
   $: canSubmit =
     canSubmitBuildReport(currentRole);
+
+  $: globalWorkspaceId =
+    $workspaceContext.selectedWorkspace?.id ?? '';
+
+  $: if (
+    initialized &&
+    globalWorkspaceId &&
+    globalWorkspaceId !== selectedWorkspaceId &&
+    workspaces.some((workspace) => workspace.id === globalWorkspaceId)
+  ) {
+    void switchWorkspace(globalWorkspaceId);
+  }
 
   $: visibleProjects = projects.filter((project) => {
     const query = projectQuery.trim().toLowerCase();
@@ -389,6 +403,7 @@
       await loadProjects(
         params.get('project_id')
       );
+      initialized = true;
     } catch (err) {
       error =
         err instanceof ApiError
@@ -405,34 +420,14 @@
     const select =
       event.currentTarget as HTMLSelectElement;
 
-    selectedWorkspaceId = select.value;
-    selectedProjectId = '';
-
-    workspaceContext.setSelectedWorkspace(
-      selectedWorkspaceId
-    );
-
-    projectQuery = '';
-    reportQuery = '';
-    statusFilter = 'all';
-    openDiagnosticsId = '';
-    showSubmitForm = false;
-
-    updatePageUrl();
-
-    try {
-      await loadProjects();
-    } catch (err) {
-      error =
-        err instanceof ApiError
-          ? err.message
-          : 'Unable to load workspace projects.';
-    }
+    await switchWorkspace(select.value);
   }
 
   async function loadProjects(
     requestedProjectId?: string | null
   ) {
+    const requestId = ++projectListRequestId;
+
     if (!selectedWorkspaceId) {
       projects = [];
       reports = [];
@@ -447,6 +442,10 @@
     const data = await listProjects(
       selectedWorkspaceId
     );
+
+    if (requestId !== projectListRequestId) {
+      return;
+    }
 
     projects = data.projects;
 
@@ -466,6 +465,38 @@
     }
 
     await loadReports(selectedProjectId);
+  }
+
+  async function switchWorkspace(workspaceId: string) {
+    selectedWorkspaceId = workspaceId;
+    selectedProjectId = '';
+    projects = [];
+    reports = [];
+    projectQuery = '';
+    reportQuery = '';
+    statusFilter = 'all';
+    openDiagnosticsId = '';
+    showSubmitForm = false;
+    resetSubmitForm();
+    error = '';
+    success = '';
+    loading = true;
+
+    const url = new URL(window.location.href);
+    url.searchParams.set('workspace_id', workspaceId);
+    url.searchParams.delete('project_id');
+    history.replaceState(null, '', `${url.pathname}${url.search}`);
+
+    try {
+      await loadProjects();
+    } catch (err) {
+      error =
+        err instanceof ApiError
+          ? err.message
+          : 'Unable to load build reports.';
+    } finally {
+      loading = false;
+    }
   }
 
   async function selectProject(project: Project) {

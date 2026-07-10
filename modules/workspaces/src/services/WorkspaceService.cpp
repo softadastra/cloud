@@ -145,6 +145,12 @@ namespace cloud::workspaces::services
       workspace.active = row.getInt64(4) != 0;
       workspace.created_at = row.getInt64(5);
       workspace.updated_at = row.getInt64(6);
+      workspace.status = row.getString(7);
+      workspace.avatar_url = row.getString(8);
+      workspace.avatar_storage_path = row.getString(9);
+      workspace.avatar_updated_at = row.getInt64(10);
+      workspace.suspended_at = row.getInt64(11);
+      workspace.deleted_at = row.getInt64(12);
       return workspace;
     }
 
@@ -152,10 +158,10 @@ namespace cloud::workspaces::services
         const vix::db::ResultRow &row) const
     {
       auto workspace = row_to_workspace(row);
-      workspace.current_user_role = row.getString(7);
-      workspace.current_user_status = row.getString(8);
-      workspace.access_scope = row.getString(9);
-      workspace.project_ids_json = row.getString(10);
+      workspace.current_user_role = row.getString(13);
+      workspace.current_user_status = row.getString(14);
+      workspace.access_scope = row.getString(15);
+      workspace.project_ids_json = row.getString(16);
       workspace.current_user_is_owner = workspace.current_user_role == "owner";
       return workspace;
     }
@@ -237,18 +243,20 @@ namespace cloud::workspaces::services
         workspace.active = true;
         workspace.created_at = timestamp;
         workspace.updated_at = timestamp;
+        workspace.status = "active";
 
         impl_->db->exec(
             "INSERT INTO workspaces "
-            "(id, owner_user_id, name, slug, active, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "(id, owner_user_id, name, slug, active, created_at, updated_at, status) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             workspace.id,
             workspace.owner_user_id,
             workspace.name,
             workspace.slug,
             static_cast<std::int64_t>(workspace.active ? 1 : 0),
             workspace.created_at,
-            workspace.updated_at);
+            workspace.updated_at,
+            workspace.status);
 
         return WorkspaceResult<dto::WorkspaceResponse>::success(workspace);
       }
@@ -276,6 +284,7 @@ namespace cloud::workspaces::services
     workspace.active = true;
     workspace.created_at = timestamp;
     workspace.updated_at = timestamp;
+    workspace.status = "active";
 
     impl_->workspace_id_by_slug[workspace.slug] = workspace.id;
     impl_->workspaces_by_id[workspace.id] = workspace;
@@ -384,8 +393,9 @@ namespace cloud::workspaces::services
     if (impl_->persistent())
     {
       auto rows = impl_->db->query(
-          "SELECT id, owner_user_id, name, slug, active, created_at, updated_at "
-          "FROM workspaces WHERE id = ? LIMIT 1",
+          "SELECT id, owner_user_id, name, slug, active, created_at, updated_at, "
+          "COALESCE(status, 'active'), COALESCE(avatar_url, ''), COALESCE(avatar_storage_path, ''), COALESCE(avatar_updated_at, 0), COALESCE(suspended_at, 0), COALESCE(deleted_at, 0) "
+          "FROM workspaces WHERE id = ? AND COALESCE(status, 'active') != 'deleted' LIMIT 1",
           request.id);
 
       if (!rows->next())
@@ -409,6 +419,120 @@ namespace cloud::workspaces::services
     return WorkspaceResult<dto::WorkspaceResponse>::success(item->second);
   }
 
+
+
+  WorkspaceResult<dto::WorkspaceResponse> WorkspaceService::update_avatar(
+      const std::string &workspace_id,
+      const std::string &avatar_url,
+      const std::string &avatar_storage_path)
+  {
+    auto current = find_workspace({workspace_id});
+
+    if (current.failed())
+    {
+      return current;
+    }
+
+    auto workspace = current.value();
+    workspace.avatar_url = avatar_url;
+    workspace.avatar_storage_path = avatar_storage_path;
+    workspace.avatar_updated_at = now_timestamp();
+    workspace.updated_at = workspace.avatar_updated_at;
+
+    if (impl_->persistent())
+    {
+      impl_->db->exec(
+          "UPDATE workspaces SET avatar_url = ?, avatar_storage_path = ?, avatar_updated_at = ?, updated_at = ? WHERE id = ?",
+          workspace.avatar_url,
+          workspace.avatar_storage_path,
+          workspace.avatar_updated_at,
+          workspace.updated_at,
+          workspace.id);
+    }
+    else
+    {
+      impl_->workspaces_by_id[workspace.id] = workspace;
+    }
+
+    return WorkspaceResult<dto::WorkspaceResponse>::success(workspace);
+  }
+
+  WorkspaceResult<std::string> WorkspaceService::delete_avatar(
+      const std::string &workspace_id)
+  {
+    auto current = find_workspace({workspace_id});
+
+    if (current.failed())
+    {
+      return WorkspaceResult<std::string>::failure(current.error());
+    }
+
+    auto workspace = current.value();
+    const auto previous_path = workspace.avatar_storage_path;
+    workspace.avatar_url.clear();
+    workspace.avatar_storage_path.clear();
+    workspace.avatar_updated_at = 0;
+    workspace.updated_at = now_timestamp();
+
+    if (impl_->persistent())
+    {
+      impl_->db->exec(
+          "UPDATE workspaces SET avatar_url = NULL, avatar_storage_path = NULL, avatar_updated_at = NULL, updated_at = ? WHERE id = ?",
+          workspace.updated_at,
+          workspace.id);
+    }
+    else
+    {
+      impl_->workspaces_by_id[workspace.id] = workspace;
+    }
+
+    return WorkspaceResult<std::string>::success(previous_path);
+  }
+
+  WorkspaceResult<dto::WorkspaceResponse> WorkspaceService::set_status(
+      const std::string &workspace_id,
+      const std::string &status)
+  {
+    if (status != "active" && status != "suspended" && status != "deleted")
+    {
+      return WorkspaceResult<dto::WorkspaceResponse>::failure({support::WorkspaceErrorCode::InvalidName,
+                                                               "Workspace status is invalid."});
+    }
+
+    auto current = find_workspace({workspace_id});
+
+    if (current.failed())
+    {
+      return current;
+    }
+
+    auto workspace = current.value();
+    const auto timestamp = now_timestamp();
+    workspace.status = status;
+    workspace.active = status == "active";
+    workspace.updated_at = timestamp;
+    workspace.suspended_at = status == "suspended" ? timestamp : 0;
+    workspace.deleted_at = status == "deleted" ? timestamp : 0;
+
+    if (impl_->persistent())
+    {
+      impl_->db->exec(
+          "UPDATE workspaces SET status = ?, active = ?, suspended_at = ?, deleted_at = ?, updated_at = ? WHERE id = ?",
+          workspace.status,
+          static_cast<std::int64_t>(workspace.active ? 1 : 0),
+          workspace.suspended_at,
+          workspace.deleted_at,
+          workspace.updated_at,
+          workspace.id);
+    }
+    else
+    {
+      impl_->workspaces_by_id[workspace.id] = workspace;
+    }
+
+    return WorkspaceResult<dto::WorkspaceResponse>::success(workspace);
+  }
+
   WorkspaceResult<std::vector<dto::WorkspaceResponse>> WorkspaceService::list_workspaces_for_owner(
       const std::string &owner_user_id) const
   {
@@ -424,13 +548,14 @@ namespace cloud::workspaces::services
     {
       auto rows = impl_->db->query(
           "SELECT DISTINCT w.id, w.owner_user_id, w.name, w.slug, w.active, w.created_at, w.updated_at, "
+          "COALESCE(w.status, 'active'), COALESCE(w.avatar_url, ''), COALESCE(w.avatar_storage_path, ''), COALESCE(w.avatar_updated_at, 0), COALESCE(w.suspended_at, 0), COALESCE(w.deleted_at, 0), "
           "CASE WHEN w.owner_user_id = ? THEN 'owner' ELSE COALESCE(wm.role, 'viewer') END AS current_user_role, "
           "CASE WHEN w.owner_user_id = ? THEN 'active' ELSE COALESCE(wm.status, 'active') END AS current_user_status, "
           "CASE WHEN w.owner_user_id = ? THEN 'entire_workspace' ELSE COALESCE(wm.access_scope, 'entire_workspace') END AS access_scope, "
           "CASE WHEN w.owner_user_id = ? THEN '' ELSE COALESCE(wm.project_ids_json, '') END AS project_ids_json "
           "FROM workspaces w "
           "LEFT JOIN workspace_members wm ON wm.workspace_id = w.id AND wm.active = 1 AND wm.status = 'active' "
-          "WHERE w.owner_user_id = ? OR wm.user_id = ? "
+          "WHERE COALESCE(w.status, 'active') != 'deleted' AND (w.owner_user_id = ? OR wm.user_id = ?) "
           "ORDER BY w.created_at",
           owner_user_id,
           owner_user_id,

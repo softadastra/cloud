@@ -28,3 +28,36 @@ export function createProject(input: {
     default_branch: input.defaultBranch ?? 'main'
   });
 }
+
+
+export function updateProject(input: {
+  workspaceId: string;
+  id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  repositoryUrl?: string;
+  defaultBranch?: string;
+}) {
+  return api.post<{ project: Project }>('/api/projects/update', {
+    workspace_id: input.workspaceId,
+    id: input.id,
+    name: input.name,
+    slug: input.slug,
+    description: input.description ?? '',
+    repository_url: input.repositoryUrl ?? '',
+    default_branch: input.defaultBranch ?? 'main'
+  });
+}
+
+export function archiveProject(workspaceId: string, id: string) {
+  return api.post<{ project: Project }>('/api/projects/archive', { workspace_id: workspaceId, id });
+}
+
+export function reactivateProject(workspaceId: string, id: string) {
+  return api.post<{ project: Project }>('/api/projects/reactivate', { workspace_id: workspaceId, id });
+}
+
+export function deleteProject(workspaceId: string, id: string) {
+  return api.post<{ project: Project }>('/api/projects/delete', { workspace_id: workspaceId, id });
+}

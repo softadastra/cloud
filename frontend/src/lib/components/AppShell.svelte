@@ -246,6 +246,18 @@ $: standalonePage =
     );
   }
 
+  function workspaceAvatarUrl(value?: string) {
+    if (!value) {
+      return '';
+    }
+
+    return value.startsWith('http') ? value : `${API_BASE_URL}${value}`;
+  }
+
+  function workspaceInitial(name?: string) {
+    return (name || 'W').slice(0, 1).toUpperCase();
+  }
+
   function isActive(href: string) {
     return (
       currentPath === href ||
@@ -650,9 +662,23 @@ $: standalonePage =
 
       {#if $workspaceContext.workspaces.length > 0}
         <section class="workspace-picker">
-          <p class="workspace-picker__label">
-            Current workspace
-          </p>
+          <div class="workspace-picker__top">
+            <span class="workspace-picker__avatar">
+              {#if workspaceAvatarUrl($workspaceContext.selectedWorkspace?.avatar_url)}
+                <img
+                  src={workspaceAvatarUrl($workspaceContext.selectedWorkspace?.avatar_url)}
+                  alt=""
+                  aria-hidden="true"
+                />
+              {:else}
+                {workspaceInitial($workspaceContext.selectedWorkspace?.name)}
+              {/if}
+            </span>
+
+            <p class="workspace-picker__label">
+              Current workspace
+            </p>
+          </div>
 
           <select
             aria-label="Current workspace"

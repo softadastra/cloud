@@ -255,5 +255,64 @@ namespace cloud::projects::controllers
           res,
           vix::json::o(
               "project", updated.value().to_json())); });
+
+
+    app.post("/api/projects/archive", [](vix::Request &req, vix::Response &res)
+             {
+      const auto &body = req.json();
+
+      if (!require_json_object(body, res))
+      {
+        return;
+      }
+
+      auto updated = project_service().set_status(read_project_lookup_request(body), "archived");
+
+      if (updated.failed())
+      {
+        support::write_project_error(res, updated.error());
+        return;
+      }
+
+      json_ok(res, vix::json::o("project", updated.value().to_json())); });
+
+    app.post("/api/projects/reactivate", [](vix::Request &req, vix::Response &res)
+             {
+      const auto &body = req.json();
+
+      if (!require_json_object(body, res))
+      {
+        return;
+      }
+
+      auto updated = project_service().set_status(read_project_lookup_request(body), "active");
+
+      if (updated.failed())
+      {
+        support::write_project_error(res, updated.error());
+        return;
+      }
+
+      json_ok(res, vix::json::o("project", updated.value().to_json())); });
+
+    app.post("/api/projects/delete", [](vix::Request &req, vix::Response &res)
+             {
+      const auto &body = req.json();
+
+      if (!require_json_object(body, res))
+      {
+        return;
+      }
+
+      auto updated = project_service().set_status(read_project_lookup_request(body), "deleted");
+
+      if (updated.failed())
+      {
+        support::write_project_error(res, updated.error());
+        return;
+      }
+
+      json_ok(res, vix::json::o("project", updated.value().to_json())); });
+
   }
 } // namespace cloud::projects::controllers

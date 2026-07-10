@@ -245,5 +245,100 @@ namespace cloud::packages::controllers
           res,
           vix::json::o(
               "package", updated.value().to_json())); });
+
+
+    app.post("/api/packages/archive", [](vix::Request &req, vix::Response &res)
+             {
+      const auto &body = req.json();
+
+      if (!require_json_object(body, res))
+      {
+        return;
+      }
+
+      auto updated = package_service().set_status(read_package_lookup_request(body), "archived");
+
+      if (updated.failed())
+      {
+        support::write_package_error(res, updated.error());
+        return;
+      }
+
+      json_ok(res, vix::json::o("package", updated.value().to_json())); });
+
+    app.post("/api/packages/reactivate", [](vix::Request &req, vix::Response &res)
+             {
+      const auto &body = req.json();
+
+      if (!require_json_object(body, res))
+      {
+        return;
+      }
+
+      auto updated = package_service().set_status(read_package_lookup_request(body), "active");
+
+      if (updated.failed())
+      {
+        support::write_package_error(res, updated.error());
+        return;
+      }
+
+      json_ok(res, vix::json::o("package", updated.value().to_json())); });
+
+    app.post("/api/packages/delete", [](vix::Request &req, vix::Response &res)
+             {
+      const auto &body = req.json();
+
+      if (!require_json_object(body, res))
+      {
+        return;
+      }
+
+      auto updated = package_service().set_status(read_package_lookup_request(body), "deleted");
+
+      if (updated.failed())
+      {
+        support::write_package_error(res, updated.error());
+        return;
+      }
+
+      json_ok(res, vix::json::o("package", updated.value().to_json())); });
+
+    app.post("/api/packages/change_visibility", [](vix::Request &req, vix::Response &res)
+             {
+      const auto &body = req.json();
+
+      if (!require_json_object(body, res))
+      {
+        return;
+      }
+
+      auto current = package_service().find_package(read_package_lookup_request(body));
+
+      if (current.failed())
+      {
+        support::write_package_error(res, current.error());
+        return;
+      }
+
+      auto package = current.value();
+      dto::UpdatePackageRequest request;
+      request.id = package.id;
+      request.workspace_id = package.workspace_id;
+      request.name = package.name;
+      request.description = package.description;
+      request.repository_url = package.repository_url;
+      request.visibility = body.value("visibility", package.visibility);
+
+      auto updated = package_service().update_package(request);
+
+      if (updated.failed())
+      {
+        support::write_package_error(res, updated.error());
+        return;
+      }
+
+      json_ok(res, vix::json::o("package", updated.value().to_json())); });
+
   }
 } // namespace cloud::packages::controllers

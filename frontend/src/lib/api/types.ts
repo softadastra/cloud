@@ -63,7 +63,10 @@ export type AdminPackageSummary = {
   description: string;
   repository_url: string;
   visibility: string;
+  status?: string;
   active: boolean;
+  archived_at?: number;
+  deleted_at?: number;
   created_at: number;
   updated_at: number;
   workspace_name: string;
@@ -270,6 +273,12 @@ export type Workspace = {
   access_scope?: "entire_workspace" | "selected_projects" | string;
   project_ids_json?: string;
   current_user_is_owner?: boolean;
+  status?: string;
+  avatar_url?: string;
+  avatar_storage_path?: string;
+  avatar_updated_at?: number;
+  suspended_at?: number;
+  deleted_at?: number;
   active: boolean;
   created_at: number;
   updated_at: number;
@@ -284,7 +293,10 @@ export type Project = {
   description: string;
   repository_url: string;
   default_branch: string;
+  status?: string;
   active: boolean;
+  archived_at?: number;
+  deleted_at?: number;
   created_at: number;
   updated_at: number;
 };
@@ -324,7 +336,10 @@ export type Package = {
   description: string;
   repository_url: string;
   visibility: string;
+  status?: string;
   active: boolean;
+  archived_at?: number;
+  deleted_at?: number;
   created_at: number;
   updated_at: number;
 };

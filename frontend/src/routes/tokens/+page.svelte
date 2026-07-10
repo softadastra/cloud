@@ -31,6 +31,8 @@
   let tokenName = 'Vix CLI';
   let loading = true;
   let saving = false;
+  let initialized = false;
+  let tokenRequestId = 0;
   let revoking = '';
   let showForm = false;
   let copied = false;
@@ -42,6 +44,18 @@
 
   $: currentRole = selectedWorkspace?.current_user_role ?? 'viewer';
   $: canManage = canManageTokens(currentRole);
+
+  $: globalWorkspaceId =
+    $workspaceContext.selectedWorkspace?.id ?? '';
+
+  $: if (
+    initialized &&
+    globalWorkspaceId &&
+    globalWorkspaceId !== selectedWorkspaceId &&
+    workspaces.some((workspace) => workspace.id === globalWorkspaceId)
+  ) {
+    void switchWorkspace(globalWorkspaceId);
+  }
 
   function roleForWorkspace(workspaceId: string) {
     return (
@@ -155,6 +169,7 @@
       workspaceContext.setWorkspaces(workspaces, selectedWorkspaceId);
 
       await loadTokens();
+      initialized = true;
     } catch (err) {
       error =
         err instanceof ApiError
@@ -166,6 +181,7 @@
   }
 
   async function loadTokens() {
+    const requestId = ++tokenRequestId;
     const user = $auth.user;
 
     if (!user || !selectedWorkspaceId) {
@@ -182,8 +198,44 @@
       return;
     }
 
-    const data = await listTokens(selectedWorkspaceId, user.id);
+    const workspaceId = selectedWorkspaceId;
+    const data = await listTokens(workspaceId, user.id);
+
+    if (
+      requestId !== tokenRequestId ||
+      selectedWorkspaceId !== workspaceId
+    ) {
+      return;
+    }
+
     tokens = data.tokens;
+  }
+
+  async function switchWorkspace(workspaceId: string) {
+    selectedWorkspaceId = workspaceId;
+    tokens = [];
+    newToken = null;
+    tokenToRevoke = null;
+    showForm = false;
+    tokenName = 'Vix CLI';
+    error = '';
+    success = '';
+    loading = true;
+
+    const url = new URL(window.location.href);
+    url.searchParams.set('workspace_id', workspaceId);
+    history.replaceState(null, '', `${url.pathname}${url.search}`);
+
+    try {
+      await loadTokens();
+    } catch (err) {
+      error =
+        err instanceof ApiError
+          ? err.message
+          : 'Unable to load tokens.';
+    } finally {
+      loading = false;
+    }
   }
 
   async function submitToken() {

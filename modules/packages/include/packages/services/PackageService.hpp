@@ -93,6 +93,10 @@ namespace cloud::packages::services
     PackageResult<dto::PackageResponse> find_package(
         const dto::PackageLookupRequest &request) const;
 
+    PackageResult<dto::PackageResponse> set_status(
+        const dto::PackageLookupRequest &request,
+        const std::string &status);
+
     PackageResult<std::vector<dto::PackageResponse>> list_packages(
         const dto::ListPackagesRequest &request) const;
 

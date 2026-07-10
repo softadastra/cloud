@@ -93,6 +93,10 @@ namespace cloud::projects::services
     ProjectResult<dto::ProjectResponse> find_project(
         const dto::ProjectLookupRequest &request) const;
 
+    ProjectResult<dto::ProjectResponse> set_status(
+        const dto::ProjectLookupRequest &request,
+        const std::string &status);
+
     ProjectResult<std::vector<dto::ProjectResponse>> list_projects(
         const dto::ListProjectsRequest &request) const;
 

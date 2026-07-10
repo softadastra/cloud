@@ -31,6 +31,8 @@
 
   let loading = true;
   let loadingVersions = false;
+  let initialized = false;
+  let packageListRequestId = 0;
   let saving = false;
 
   let error = '';
@@ -67,6 +69,18 @@
 
   $: canPublish =
     canPublishPackageVersion(currentRole);
+
+  $: globalWorkspaceId =
+    $workspaceContext.selectedWorkspace?.id ?? '';
+
+  $: if (
+    initialized &&
+    globalWorkspaceId &&
+    globalWorkspaceId !== selectedWorkspaceId &&
+    workspaces.some((workspace) => workspace.id === globalWorkspaceId)
+  ) {
+    void switchWorkspace(globalWorkspaceId);
+  }
 
   $: visiblePackages = packages.filter((pkg) => {
     const query = packageQuery.trim().toLowerCase();
@@ -291,6 +305,7 @@
       await loadPackages(
         params.get('package_id')
       );
+      initialized = true;
     } catch (err) {
       error =
         err instanceof ApiError
@@ -304,6 +319,8 @@
   async function loadPackages(
     requestedPackageId?: string | null
   ) {
+    const requestId = ++packageListRequestId;
+
     if (!selectedWorkspaceId) {
       packages = [];
       versions = [];
@@ -318,6 +335,10 @@
     const data = await listPackages(
       selectedWorkspaceId
     );
+
+    if (requestId !== packageListRequestId) {
+      return;
+    }
 
     packages = data.packages;
 
@@ -336,6 +357,38 @@
     }
 
     await loadVersions(selectedPackageId);
+  }
+
+  async function switchWorkspace(workspaceId: string) {
+    selectedWorkspaceId = workspaceId;
+    selectedPackageId = '';
+    packages = [];
+    versions = [];
+    packageQuery = '';
+    versionQuery = '';
+    versionStatusFilter = 'all';
+    copiedChecksumId = '';
+    showPublishForm = false;
+    resetPublishForm();
+    error = '';
+    success = '';
+    loading = true;
+
+    const url = new URL(window.location.href);
+    url.searchParams.set('workspace_id', workspaceId);
+    url.searchParams.delete('package_id');
+    history.replaceState(null, '', `${url.pathname}${url.search}`);
+
+    try {
+      await loadPackages();
+    } catch (err) {
+      error =
+        err instanceof ApiError
+          ? err.message
+          : 'Unable to load package versions.';
+    } finally {
+      loading = false;
+    }
   }
 
   async function selectPackage(pkg: Package) {

@@ -59,6 +59,8 @@
 
   let loading = true;
   let saving = false;
+  let initialized = false;
+  let memberRequestId = 0;
   let busyId = '';
   let error = '';
   let success = '';
@@ -73,6 +75,18 @@
   $: permissionContext = getPermissionContext(selectedWorkspaceId);
   $: currentRole = permissionContext.role;
   $: canManage = canManageMembersContext(permissionContext);
+
+  $: globalWorkspaceId =
+    $workspaceContext.selectedWorkspace?.id ?? '';
+
+  $: if (
+    initialized &&
+    globalWorkspaceId &&
+    globalWorkspaceId !== selectedWorkspaceId &&
+    workspaces.some((workspace) => workspace.id === globalWorkspaceId)
+  ) {
+    void switchWorkspace(globalWorkspaceId);
+  }
 
   $: pendingInvites = invites.filter(
     (invite) => invite.status === 'pending'
@@ -231,6 +245,7 @@
       );
 
       await loadMembers();
+      initialized = true;
     } catch (err) {
       error =
         err instanceof ApiError
@@ -242,6 +257,8 @@
   }
 
   async function loadMembers() {
+    const requestId = ++memberRequestId;
+
     if (!selectedWorkspaceId) {
       members = [];
       invites = [];
@@ -256,6 +273,10 @@
       listProjects(selectedWorkspaceId)
     ]);
 
+    if (requestId !== memberRequestId) {
+      return;
+    }
+
     members = memberData.members;
     projects = projectData.projects;
     selectedProjectIds = [];
@@ -269,6 +290,34 @@
       invites = inviteData.invites;
     } else {
       invites = [];
+    }
+  }
+
+  async function switchWorkspace(workspaceId: string) {
+    selectedWorkspaceId = workspaceId;
+    members = [];
+    invites = [];
+    projects = [];
+    showInviteForm = false;
+    resetInviteForm();
+    confirmation = null;
+    error = '';
+    success = '';
+    loading = true;
+
+    const url = new URL(window.location.href);
+    url.searchParams.set('workspace_id', workspaceId);
+    history.replaceState(null, '', `${url.pathname}${url.search}`);
+
+    try {
+      await loadMembers();
+    } catch (err) {
+      error =
+        err instanceof ApiError
+          ? err.message
+          : 'Unable to load members.';
+    } finally {
+      loading = false;
     }
   }
 

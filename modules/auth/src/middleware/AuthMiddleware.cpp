@@ -60,7 +60,8 @@ namespace cloud::auth::middleware
              path == "/ready" ||
              starts_with(path, "/api/auth") ||
              starts_with(path, "/api/public") ||
-             starts_with(path, "/storage/users/");
+             starts_with(path, "/storage/users/") ||
+             starts_with(path, "/storage/workspaces/");
     }
 
     bool is_module_probe(
@@ -211,7 +212,11 @@ namespace cloud::auth::middleware
       }
 
       if (starts_with(req.path(), "/api/workspaces/show") ||
-          starts_with(req.path(), "/api/workspaces/update"))
+          starts_with(req.path(), "/api/workspaces/update") ||
+          starts_with(req.path(), "/api/workspaces/suspend") ||
+          starts_with(req.path(), "/api/workspaces/reactivate") ||
+          starts_with(req.path(), "/api/workspaces/delete") ||
+          starts_with(req.path(), "/api/workspaces/avatar/delete"))
       {
         return json_value(req, "id");
       }
@@ -240,7 +245,10 @@ namespace cloud::auth::middleware
       }
 
       if (starts_with(req.path(), "/api/projects/show") ||
-          starts_with(req.path(), "/api/projects/update"))
+          starts_with(req.path(), "/api/projects/update") ||
+          starts_with(req.path(), "/api/projects/archive") ||
+          starts_with(req.path(), "/api/projects/reactivate") ||
+          starts_with(req.path(), "/api/projects/delete"))
       {
         return json_value(req, "id");
       }
@@ -334,6 +342,12 @@ namespace cloud::auth::middleware
         return true;
       }
 
+      if (starts_with(req.path(), "/api/workspaces/update") ||
+          starts_with(req.path(), "/api/workspaces/avatar"))
+      {
+        return true;
+      }
+
       if (starts_with(req.path(), "/api/feedback/list_workspace") ||
           starts_with(req.path(), "/api/feedback/update_status"))
       {
@@ -350,10 +364,23 @@ namespace cloud::auth::middleware
       return starts_with(req.path(), "/api/members") && !action_is_read(req);
     }
 
+    bool action_requires_owner(
+        const vix::Request &req)
+    {
+      return starts_with(req.path(), "/api/workspaces/suspend") ||
+             starts_with(req.path(), "/api/workspaces/reactivate") ||
+             starts_with(req.path(), "/api/workspaces/delete");
+    }
+
     bool role_allows(
         const std::string &role,
         const vix::Request &req)
     {
+      if (action_requires_owner(req))
+      {
+        return role == "owner";
+      }
+
       if (role == "owner")
       {
         return true;
@@ -446,6 +473,22 @@ namespace cloud::auth::middleware
           token_hash);
 
       return true;
+    }
+
+    std::string workspace_status(
+        vix::db::Database &db,
+        const std::string &workspace_id)
+    {
+      auto rows = db.query(
+          "SELECT COALESCE(status, 'active') FROM workspaces WHERE id = ? LIMIT 1",
+          workspace_id);
+
+      if (!rows->next())
+      {
+        return {};
+      }
+
+      return rows->row().getString(0);
     }
 
     bool authenticate_session_context(
@@ -563,6 +606,19 @@ namespace cloud::auth::middleware
       if (!workspace_owner_or_member_context(*db, workspace_id, ctx.user_id, ctx))
       {
         json_error(res, 403, "forbidden", "User does not belong to this workspace.");
+        return false;
+      }
+
+      const auto status = workspace_status(*db, workspace_id);
+      if (status == "suspended" && !action_is_read(req) && !starts_with(req.path(), "/api/workspaces/reactivate"))
+      {
+        json_error(res, 403, "workspace_suspended", "This workspace is suspended. Reactivate it before making changes.");
+        return false;
+      }
+
+      if (status == "deleted")
+      {
+        json_error(res, 404, "workspace_not_found", "Workspace was not found.");
         return false;
       }
 

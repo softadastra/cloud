@@ -192,6 +192,9 @@ namespace cloud::packages::services
       package.active = row.getInt64(7) != 0;
       package.created_at = row.getInt64(8);
       package.updated_at = row.getInt64(9);
+      package.status = row.getString(10);
+      package.archived_at = row.getInt64(11);
+      package.deleted_at = row.getInt64(12);
       return package;
     }
 
@@ -253,11 +256,12 @@ namespace cloud::packages::services
         package.active = true;
         package.created_at = timestamp;
         package.updated_at = timestamp;
+        package.status = "active";
 
         impl_->db->exec(
-            "INSERT INTO packages (id, workspace_id, owner_user_id, name, description, repository_url, visibility, active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO packages (id, workspace_id, owner_user_id, name, description, repository_url, visibility, active, created_at, updated_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             package.id, package.workspace_id, package.owner_user_id, package.name, package.description, package.repository_url, package.visibility,
-            static_cast<std::int64_t>(1), package.created_at, package.updated_at);
+            static_cast<std::int64_t>(1), package.created_at, package.updated_at, std::string{"active"});
 
         create_public_package_activity(*impl_->db, package);
 
@@ -288,6 +292,7 @@ namespace cloud::packages::services
     package.active = true;
     package.created_at = timestamp;
     package.updated_at = timestamp;
+    package.status = "active";
 
     impl_->package_id_by_workspace_name[key] = package.id;
     impl_->packages_by_id[package.id] = package;
@@ -382,7 +387,7 @@ namespace cloud::packages::services
     if (impl_->persistent())
     {
       auto rows = impl_->db->query(
-          "SELECT id, workspace_id, owner_user_id, name, description, repository_url, visibility, active, created_at, updated_at FROM packages WHERE id = ? AND workspace_id = ? LIMIT 1",
+          "SELECT id, workspace_id, owner_user_id, name, description, repository_url, visibility, active, created_at, updated_at, COALESCE(status, 'active'), COALESCE(archived_at, 0), COALESCE(deleted_at, 0) FROM packages WHERE id = ? AND workspace_id = ? AND COALESCE(status, 'active') != 'deleted' LIMIT 1",
           request.id, request.workspace_id);
       if (!rows->next())
       {
@@ -399,6 +404,51 @@ namespace cloud::packages::services
     return PackageResult<dto::PackageResponse>::success(item->second);
   }
 
+
+
+  PackageResult<dto::PackageResponse> PackageService::set_status(
+      const dto::PackageLookupRequest &request,
+      const std::string &status)
+  {
+    if (status != "active" && status != "archived" && status != "deleted")
+    {
+      return PackageResult<dto::PackageResponse>::failure({support::PackageErrorCode::InvalidName, "Package status is invalid."});
+    }
+
+    auto current = find_package(request);
+    if (current.failed())
+    {
+      return current;
+    }
+
+    auto package = current.value();
+    const auto timestamp = now_timestamp();
+    package.status = status;
+    package.active = status == "active";
+    package.updated_at = timestamp;
+    package.archived_at = status == "archived" ? timestamp : 0;
+    package.deleted_at = status == "deleted" ? timestamp : 0;
+
+    if (impl_->persistent())
+    {
+      impl_->db->exec(
+          "UPDATE packages SET status = ?, active = ?, archived_at = ?, deleted_at = ?, updated_at = ? WHERE id = ? AND workspace_id = ?",
+          package.status,
+          static_cast<std::int64_t>(package.active ? 1 : 0),
+          package.archived_at,
+          package.deleted_at,
+          package.updated_at,
+          package.id,
+          package.workspace_id);
+    }
+    else
+    {
+      impl_->packages_by_id[package.id] = package;
+    }
+
+    return PackageResult<dto::PackageResponse>::success(package);
+  }
+
   PackageResult<std::vector<dto::PackageResponse>> PackageService::list_packages(const dto::ListPackagesRequest &request) const
   {
     if (request.workspace_id.empty())
@@ -410,7 +460,7 @@ namespace cloud::packages::services
     if (impl_->persistent())
     {
       auto rows = impl_->db->query(
-          "SELECT id, workspace_id, owner_user_id, name, description, repository_url, visibility, active, created_at, updated_at FROM packages WHERE workspace_id = ? ORDER BY created_at",
+          "SELECT id, workspace_id, owner_user_id, name, description, repository_url, visibility, active, created_at, updated_at, COALESCE(status, 'active'), COALESCE(archived_at, 0), COALESCE(deleted_at, 0) FROM packages WHERE workspace_id = ? AND COALESCE(status, 'active') != 'deleted' ORDER BY created_at",
           request.workspace_id);
       while (rows->next())
       {
