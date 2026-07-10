@@ -148,6 +148,7 @@
   $: currentPath = $page.url.pathname;
 
 $: standalonePage =
+  currentPath === '/' ||
   currentPath === '/login' ||
   currentPath === '/register' ||
   currentPath === '/support' ||

@@ -11,6 +11,7 @@
     (browser ? `${window.location.protocol}//${window.location.hostname}:8080` : '');
 
   let failedUrl = '';
+  let lastSrc = '';
 
   $: initial = (workspace?.name || workspace?.slug || 'W').slice(0, 1).toUpperCase();
   $: rawUrl = previewUrl || workspace?.avatar_url || '';
@@ -21,6 +22,10 @@
       : `${API_BASE_URL}${rawUrl}`
     : '';
   $: src = resolvedUrl && version ? `${resolvedUrl}?v=${version}` : resolvedUrl;
+  $: if (src !== lastSrc) {
+    failedUrl = '';
+    lastSrc = src;
+  }
   $: showImage = Boolean(src && src !== failedUrl);
 </script>
 

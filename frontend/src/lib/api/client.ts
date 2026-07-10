@@ -62,14 +62,58 @@ export class ApiClient {
     return this.request<T>('POST', path, body);
   }
 
-  async postRaw<T>(path: string, body: BodyInit, contentType: string): Promise<T> {
+  async postRaw<T>(path: string, body: BodyInit, contentType?: string): Promise<T> {
+    return this.postBody<T>(path, body, contentType);
+  }
+
+  async postBody<T>(path: string, body: BodyInit, contentType?: string): Promise<T> {
     this.restoreSessionFromStorage();
 
-    const headers: Record<string, string> = {
-      Accept: 'application/json',
-      'Content-Type': contentType
-    };
+    const headers = this.authHeaders({ Accept: 'application/json' });
 
+    if (contentType && !(body instanceof FormData)) {
+      headers['Content-Type'] = contentType;
+    }
+
+    const request = () =>
+      fetch(`${this.baseUrl}${path}`, {
+        method: 'POST',
+        headers,
+        body
+      });
+
+    let response: Response;
+
+    try {
+      response = await request();
+    } catch {
+      this.sessionId = null;
+      this.restoreSessionFromStorage();
+      const retryHeaders = this.authHeaders({ Accept: 'application/json' });
+
+      if (contentType && !(body instanceof FormData)) {
+        retryHeaders['Content-Type'] = contentType;
+      }
+
+      try {
+        response = await fetch(`${this.baseUrl}${path}`, {
+          method: 'POST',
+          headers: retryHeaders,
+          body
+        });
+      } catch {
+        throw new ApiError(
+          0,
+          'network_error',
+          `Unable to reach the API at ${this.baseUrl || '(empty API base URL)'}. Check that the backend is running and that VITE_API_BASE_URL is correct.`
+        );
+      }
+    }
+
+    return this.parseResponse<T>(response, path);
+  }
+
+  private authHeaders(headers: Record<string, string>) {
     if (this.sessionId) {
       if (this.authHeader === 'authorization' || this.authHeader === 'both') {
         headers.Authorization = `Bearer ${this.sessionId}`;
@@ -80,25 +124,8 @@ export class ApiClient {
       }
     }
 
-    let response: Response;
-
-    try {
-      response = await fetch(`${this.baseUrl}${path}`, {
-        method: 'POST',
-        headers,
-        body
-      });
-    } catch {
-      throw new ApiError(
-        0,
-        'network_error',
-        'Unable to reach the API. Check that the backend is running and that VITE_API_BASE_URL is correct.'
-      );
-    }
-
-    return this.parseResponse<T>(response, path);
+    return headers;
   }
-
   private async request<T>(method: string, path: string, body?: Record<string, unknown>): Promise<T> {
     this.restoreSessionFromStorage();
 
@@ -116,15 +143,7 @@ export class ApiClient {
       init.body = JSON.stringify(body);
     }
 
-    if (this.sessionId) {
-      if (this.authHeader === 'authorization' || this.authHeader === 'both') {
-        headers.Authorization = `Bearer ${this.sessionId}`;
-      }
-
-      if (this.authHeader === 'x-session-id' || this.authHeader === 'both') {
-        headers['X-Session-Id'] = this.sessionId;
-      }
-    }
+    this.authHeaders(headers);
 
     let response: Response;
 

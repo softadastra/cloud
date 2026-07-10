@@ -299,6 +299,20 @@
       return;
     }
 
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      error = 'Workspace logo must be a JPG, PNG or WebP image.';
+      success = '';
+      input.value = '';
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      error = 'Choose a workspace logo smaller than 2MB.';
+      success = '';
+      input.value = '';
+      return;
+    }
+
     if (avatarPreviewUrl) {
       URL.revokeObjectURL(avatarPreviewUrl);
     }
