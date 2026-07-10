@@ -7,6 +7,8 @@
 
 #include <auth/middleware/AuthMiddleware.hpp>
 
+#include <string>
+
 #include <vix.hpp>
 #include <vix/log.hpp>
 #include <vix/middleware.hpp>
@@ -41,6 +43,39 @@ namespace cloud::presentation::middleware
     cors_options.expose_headers = {"X-Request-Id"};
 
     app.use(vix::middleware::app::adapt_ctx(vix::middleware::security::cors(std::move(cors_options))));
+
+    // Explicit CORS fallback for browser preflight requests. The framework CORS
+    // middleware handles most cases, but uploads with Authorization + image
+    // Content-Type must always receive these headers or fetch reports a network error.
+    app.use([](vix::Request &req, vix::Response &res, vix::App::Next next)
+    {
+      auto origin = req.header("Origin");
+
+      if (origin.empty())
+      {
+        origin = req.header("origin");
+      }
+
+      if (origin == "http://localhost:5173" ||
+          origin == "http://127.0.0.1:5173" ||
+          origin == "http://192.168.1.6:5173")
+      {
+        res.header("Access-Control-Allow-Origin", origin);
+        res.header("Access-Control-Allow-Credentials", "true");
+        res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+        res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Session-Id, X-Access-Token, X-Requested-With, Accept, Origin");
+        res.header("Access-Control-Expose-Headers", "X-Request-Id");
+        res.header("Vary", "Origin");
+      }
+
+      if (req.method() == "OPTIONS")
+      {
+        res.status(204);
+        return;
+      }
+
+      next();
+    });
 
     // Security headers.
     app.use(vix::middleware::app::security_headers_dev(false));
