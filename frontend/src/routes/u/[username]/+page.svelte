@@ -5,6 +5,7 @@
   import ContributionGrid from '$lib/components/ContributionGrid.svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
   import InlineError from '$lib/components/InlineError.svelte';
+  import SupporterBadge from '$lib/components/SupporterBadge.svelte';
   import { updateProfilePins } from '$lib/api/profilePins';
   import { getPublicProfile } from '$lib/api/publicProfiles';
   import { ApiError } from '$lib/api/types';
@@ -303,12 +304,16 @@ $: canCustomizePins = isOwner;
         </div>
 
         <div class="profile-name">
-        <h2>{publicDisplayName}</h2>
+          <h2>{publicDisplayName}</h2>
 
-        {#if publicUsername}
-          <p>@{publicUsername}</p>
-        {/if}
-      </div>
+          {#if publicUsername}
+            <p>@{publicUsername}</p>
+          {/if}
+
+          {#if data.supporter}
+            <SupporterBadge tier={data.supporter.tier} />
+          {/if}
+        </div>
 
         <span class="profile-label">Softadastra Cloud builder</span>
 
@@ -474,9 +479,6 @@ $: canCustomizePins = isOwner;
   .loading-state, .private-state { border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--bg-panel); padding: 28px; }
   .private-state h1 { color: var(--text); font-size: 22px; }
   .private-state p, .loading-state p { margin-top: 8px; color: var(--text-muted); font-size: 13px; }
-  .topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); padding: 8px 0 18px; }
-  .topbar p { color: var(--brand-bright); font-size: 11px; font-weight: 700; text-transform: uppercase; }
-  .topbar h1 { margin-top: 4px; color: var(--text); font-size: 24px; line-height: 1.2; }
   .pin-button { white-space: nowrap; }
   .profile-tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--line); margin-bottom: 22px; }
   .profile-tabs a { display: flex; align-items: center; gap: 6px; border-bottom: 2px solid transparent; color: var(--text-muted); padding: 13px 2px 11px; font-size: 13px; font-weight: 650; }
@@ -551,9 +553,6 @@ $: canCustomizePins = isOwner;
   .event-copy { display: grid; min-width: 0; gap: 4px; }
   .event-copy strong { color: var(--text-soft); font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
   .event-copy span { color: var(--text-muted); font-size: 10.5px; }
-  .compact-package-list { display: grid; gap: 8px; }
-  .compact-package-list a { display: flex; justify-content: space-between; gap: 12px; border: 1px solid var(--line-soft); border-radius: var(--radius-sm); color: var(--link); padding: 10px; font-size: 12px; font-weight: 700; }
-  .compact-package-list span { color: var(--text-muted); font-weight: 500; }
   .modal-backdrop { position: fixed; inset: 0; z-index: 80; background: rgba(0, 0, 0, 0.42); }
   .pins-modal { position: fixed; z-index: 90; top: 50%; left: 50%; display: grid; width: min(620px, calc(100vw - 28px)); max-height: calc(100vh - 48px); overflow: auto; transform: translate(-50%, -50%); border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--bg-panel); box-shadow: var(--shadow-lg); }
   .modal-header { display: flex; justify-content: space-between; gap: 14px; border-bottom: 1px solid var(--line-soft); padding: 15px 16px; }

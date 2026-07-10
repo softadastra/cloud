@@ -95,8 +95,40 @@ export type PublicProfileStats = {
   pinned_packages_count: number;
 };
 
+export type SupportPlanTier = 'founding_supporter' | 'founding_builder';
+
+export type PublicSupporter = {
+  tier: SupportPlanTier | string;
+  display_name: string;
+  username: string;
+  project_name: string;
+  website_url: string;
+  github_url: string;
+  stronger_visibility: boolean;
+  started_at: number;
+};
+
+export type SupportConfig = {
+  supporter_payment_url: string;
+  builder_payment_url: string;
+  contact_email: string;
+  contact_url: string;
+};
+
+export type MySupporterStatus = {
+  supporter: (PublicSupporter & {
+    status: string;
+    public_visible: boolean;
+  }) | null;
+};
+
+export type PublicSupportersData = {
+  supporters: PublicSupporter[];
+};
+
 export type PublicProfileResponse = {
   profile: PublicProfile;
+  supporter?: PublicSupporter | null;
   pinned_packages: PublicPackageSummary[];
   public_packages: PublicPackageSummary[];
   contribution_grid: ContributionGridDay[];

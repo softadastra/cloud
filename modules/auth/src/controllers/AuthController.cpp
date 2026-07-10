@@ -23,6 +23,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
 #include <cctype>
 #include <ctime>
 #include <filesystem>
@@ -441,6 +442,82 @@ namespace cloud::auth::controllers
           "created_at INTEGER NOT NULL)");
     }
 
+
+    void ensure_founding_supporters_table(vix::db::Database &db)
+    {
+      db.exec(
+          "CREATE TABLE IF NOT EXISTS founding_supporters ("
+          "id TEXT PRIMARY KEY, "
+          "user_id TEXT NULL, "
+          "tier TEXT NOT NULL, "
+          "status TEXT NOT NULL DEFAULT 'active', "
+          "display_name TEXT NOT NULL, "
+          "username TEXT NULL, "
+          "project_name TEXT NULL, "
+          "website_url TEXT NULL, "
+          "github_url TEXT NULL, "
+          "public_visible INTEGER NOT NULL DEFAULT 1, "
+          "stronger_visibility INTEGER NOT NULL DEFAULT 0, "
+          "notes TEXT NULL, "
+          "started_at INTEGER NOT NULL, "
+          "expires_at INTEGER NULL, "
+          "created_at INTEGER NOT NULL, "
+          "updated_at INTEGER NOT NULL)");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_founding_supporters_user_id ON founding_supporters(user_id)");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_founding_supporters_public ON founding_supporters(status, public_visible, tier)");
+    }
+
+    std::string env_value(const std::string &name)
+    {
+      if (const char *value = std::getenv(name.c_str()))
+      {
+        return value;
+      }
+
+      std::ifstream input{".env"};
+      std::string line;
+      const auto prefix = name + "=";
+      while (std::getline(input, line))
+      {
+        if (line.rfind(prefix, 0) == 0)
+        {
+          return line.substr(prefix.size());
+        }
+      }
+      return {};
+    }
+
+    vix::json::Json supporter_public_json(const vix::db::ResultRow &row)
+    {
+      return vix::json::o(
+          "tier", row.getString(0),
+          "display_name", row.getString(1),
+          "username", row.getString(2),
+          "project_name", row.getString(3),
+          "website_url", row.getString(4),
+          "github_url", row.getString(5),
+          "stronger_visibility", row.getInt64(6) != 0,
+          "started_at", row.getInt64(7));
+    }
+
+    vix::json::Json active_public_supporter_for_user(vix::db::Database &db, const std::string &user_id)
+    {
+      auto rows = db.query(
+          "SELECT tier, display_name, COALESCE(username, ''), COALESCE(project_name, ''), "
+          "COALESCE(website_url, ''), COALESCE(github_url, ''), stronger_visibility, started_at "
+          "FROM founding_supporters "
+          "WHERE user_id = ? AND status = 'active' AND public_visible = 1 "
+          "ORDER BY stronger_visibility DESC, started_at ASC LIMIT 1",
+          user_id);
+
+      if (rows->next())
+      {
+        return supporter_public_json(rows->row());
+      }
+
+      return vix::json::Json{};
+    }
+
     void public_profile_show(vix::Request &req, vix::Response &res)
     {
       auto username = req.has_query("username") ? req.query_value("username") : std::string{};
@@ -494,6 +571,7 @@ namespace cloud::auth::controllers
         vix::db::Database db{cfg};
         ensure_public_activity_table(db);
         ensure_public_profile_pins_table(db);
+        ensure_founding_supporters_table(db);
 
         auto profile_rows = db.query(
             "SELECT user_id, COALESCE(display_name, ''), COALESCE(username, ''), COALESCE(bio, ''), "
@@ -523,6 +601,8 @@ namespace cloud::auth::controllers
           json_error(res, 404, "profile_not_found", "Profile was not found.");
           return;
         }
+
+        const auto supporter_badge = active_public_supporter_for_user(db, user_id);
 
         auto pinned_packages = vix::json::Json::array();
         auto pinned_rows = db.query(
@@ -680,6 +760,88 @@ namespace cloud::auth::controllers
       catch (...)
       {
         return {};
+      }
+    }
+
+
+    void public_support_config(vix::Request &, vix::Response &res)
+    {
+      json_ok(res, vix::json::o(
+          "supporter_payment_url", env_value("SOFTADASTRA_SUPPORTER_PAYMENT_URL"),
+          "builder_payment_url", env_value("SOFTADASTRA_BUILDER_PAYMENT_URL"),
+          "contact_email", env_value("SOFTADASTRA_SUPPORT_CONTACT_EMAIL"),
+          "contact_url", env_value("SOFTADASTRA_SUPPORT_CONTACT_URL")));
+    }
+
+    void public_supporters_list(vix::Request &, vix::Response &res)
+    {
+      try
+      {
+        vix::config::Config cfg{".env"};
+        vix::db::Database db{cfg};
+        ensure_founding_supporters_table(db);
+
+        auto supporters = vix::json::Json::array();
+        auto rows = db.query(
+            "SELECT tier, display_name, COALESCE(username, ''), COALESCE(project_name, ''), "
+            "COALESCE(website_url, ''), COALESCE(github_url, ''), stronger_visibility, started_at "
+            "FROM founding_supporters "
+            "WHERE status = 'active' AND public_visible = 1 "
+            "ORDER BY stronger_visibility DESC, started_at ASC, display_name ASC");
+
+        while (rows->next())
+        {
+          supporters.push_back(supporter_public_json(rows->row()));
+        }
+
+        json_ok(res, vix::json::o("supporters", supporters));
+      }
+      catch (...)
+      {
+        json_error(res, 500, "supporters_error", "Could not load founding supporters.");
+      }
+    }
+
+    void supporter_me(vix::Request &req, vix::Response &res)
+    {
+      const auto user_id = current_user_id(req);
+      if (user_id.empty())
+      {
+        json_error(res, 401, "unauthenticated", "Authentication is required.");
+        return;
+      }
+
+      try
+      {
+        vix::config::Config cfg{".env"};
+        vix::db::Database db{cfg};
+        ensure_founding_supporters_table(db);
+
+        auto rows = db.query(
+            "SELECT tier, status, display_name, started_at, public_visible, stronger_visibility "
+            "FROM founding_supporters WHERE user_id = ? "
+            "ORDER BY status = 'active' DESC, stronger_visibility DESC, started_at ASC LIMIT 1",
+            user_id);
+
+        if (!rows->next())
+        {
+          json_ok(res, vix::json::o("supporter", vix::json::Json{}));
+          return;
+        }
+
+        const auto &row = rows->row();
+        json_ok(res, vix::json::o(
+            "supporter", vix::json::o(
+                "tier", row.getString(0),
+                "status", row.getString(1),
+                "display_name", row.getString(2),
+                "started_at", row.getInt64(3),
+                "public_visible", row.getInt64(4) != 0,
+                "stronger_visibility", row.getInt64(5) != 0)));
+      }
+      catch (...)
+      {
+        json_error(res, 500, "supporter_status_error", "Could not load supporter status.");
       }
     }
 
@@ -1162,6 +1324,15 @@ namespace cloud::auth::controllers
 
     app.post("/api/profile/pins/update", [](vix::Request &req, vix::Response &res)
              { profile_pins_update(req, res); });
+
+    app.post("/api/public/support/config", [](vix::Request &req, vix::Response &res)
+             { public_support_config(req, res); });
+
+    app.post("/api/public/supporters/list", [](vix::Request &req, vix::Response &res)
+             { public_supporters_list(req, res); });
+
+    app.post("/api/supporters/me", [](vix::Request &req, vix::Response &res)
+             { supporter_me(req, res); });
 
     app.post("/api/public/users/show", [](vix::Request &req, vix::Response &res)
              { public_profile_show(req, res); });

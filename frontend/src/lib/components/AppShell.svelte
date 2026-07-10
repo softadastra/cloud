@@ -134,6 +134,8 @@
 $: standalonePage =
   currentPath === '/login' ||
   currentPath === '/register' ||
+  currentPath === '/support' ||
+  currentPath === '/supporters' ||
   currentPath.startsWith('/u/');
 
   $: accountName =
@@ -462,13 +464,16 @@ $: standalonePage =
   onpointerup={stopSidebarResize}
 />
 
+{#if standalonePage}
+  <slot />
+{:else}
 <div
   class="app-shell"
   class:sidebar-collapsed={sidebarCollapsed}
   class:sidebar-resizing={resizingSidebar}
   style={`--sidebar-current-width: ${sidebarWidth}px;`}
 >
- {#if $auth.session && !standalonePage}
+ {#if $auth.session}
     <header class="mobile-header">
       <button
         class="icon-button"
@@ -844,35 +849,24 @@ $: standalonePage =
   {/if}
 
 <main
-  class:authenticated={$auth.session && !standalonePage}
-  class:standalone={standalonePage}
+  class:authenticated={$auth.session}
   class="app-main"
 >
   <div
-    class:app-main__inner={!standalonePage}
-    class:standalone-content={standalonePage}
+    class:app-main__inner={true}
   >
     <slot />
   </div>
 </main>
 </div>
 
+{/if}
+
 <style>
   .app-shell {
     min-height: 100vh;
   }
 
-.app-main.standalone {
-  width: 100%;
-  min-height: 100vh;
-  margin-left: 0;
-  padding: 0;
-}
-
-.standalone-content {
-  width: 100%;
-  min-height: 100vh;
-}
 
   .app-sidebar {
     width: var(

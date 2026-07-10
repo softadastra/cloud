@@ -263,3 +263,10 @@ This project does not generate `public/` or `views/`, and `AppBootstrap` does no
 - Keep reusable helpers under `support/`.
 - Put business logic under `application/` and `domain/` as the app grows.
 - Put database, files, and external services under `infrastructure/`.
+## Founding Supporters
+
+Softadastra Cloud is in active development as a C++ cloud workspace for Vix projects, private packages, lockfiles, build reports, permissions, notifications and team activity. The Founding Supporters program is an early way to support that work before the full paid platform is ready.
+
+There are two simple tiers: Founding Supporter at $10/month and Founding Builder at $25/month. Payments are handled through external payment links configured in the environment, and supporter records are currently confirmed and linked manually after payment. Softadastra Cloud does not store card details, payment metadata, or private billing information in this MVP step.
+
+Public supporter records can appear on `/supporters` when `public_visible` is enabled. Supporter badges can also appear on public user profiles, but only for active supporters who have chosen public visibility.

@@ -8,10 +8,12 @@
     updateProfile,
     uploadAvatar
   } from '$lib/api/auth';
+  import { getMySupporterStatus } from '$lib/api/support';
   import { ApiError } from '$lib/api/types';
-  import type { User } from '$lib/api/types';
+  import type { MySupporterStatus, User } from '$lib/api/types';
   import InlineError from '$lib/components/InlineError.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
+  import SupporterBadge from '$lib/components/SupporterBadge.svelte';
   import { auth } from '$lib/stores/auth';
 
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? (browser ? `${window.location.protocol}//${window.location.hostname}:8080` : '');
@@ -48,6 +50,8 @@
   let savingPassword = false;
   let uploadingAvatar = false;
   let deletingAvatar = false;
+  let supporterStatus: MySupporterStatus['supporter'] = null;
+  let loadingSupporterStatus = false;
 
   let copiedUserId = false;
   let copyResetTimer:
@@ -363,6 +367,23 @@
     }
   }
 
+  async function loadSupporterStatus() {
+    if (!session) {
+      return;
+    }
+
+    loadingSupporterStatus = true;
+
+    try {
+      const data = await getMySupporterStatus();
+      supporterStatus = data.supporter;
+    } catch {
+      supporterStatus = null;
+    } finally {
+      loadingSupporterStatus = false;
+    }
+  }
+
   function logout() {
     auth.clear();
     window.location.href = '/login';
@@ -375,6 +396,7 @@
     }
 
     syncProfileForm(user);
+    void loadSupporterStatus();
 
     return () => {
       if (copyResetTimer) {
@@ -765,6 +787,38 @@
           </button>
         </div>
       </form>
+    </section>
+
+
+    <section
+      class="settings-section"
+      aria-labelledby="supporter-title"
+    >
+      <div class="section-header">
+        <div>
+          <h2 id="supporter-title">Founding Supporter</h2>
+          <p>Supporter records are linked manually after external payment confirmation.</p>
+        </div>
+      </div>
+
+      {#if loadingSupporterStatus}
+        <p class="supporter-note">Loading supporter status...</p>
+      {:else if supporterStatus}
+        <div class="supporter-status-card">
+          <SupporterBadge tier={supporterStatus.tier} />
+          <dl>
+            <div><dt>Tier</dt><dd>{supporterStatus.tier === 'founding_builder' ? 'Founding Builder' : 'Founding Supporter'}</dd></div>
+            <div><dt>Status</dt><dd>{supporterStatus.status}</dd></div>
+            <div><dt>Since</dt><dd>{formatDate(supporterStatus.started_at)}</dd></div>
+            <div><dt>Public visibility</dt><dd>{supporterStatus.public_visible ? 'Visible' : 'Hidden'}</dd></div>
+          </dl>
+        </div>
+      {:else}
+        <div class="supporter-status-card">
+          <p>Founding Supporters help fund early Softadastra Cloud development before the full paid platform is ready.</p>
+          <a class="view-profile-link" href="/support">View Founding Supporter program</a>
+        </div>
+      {/if}
     </section>
 
     <section
