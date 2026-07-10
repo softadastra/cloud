@@ -46,6 +46,11 @@ namespace cloud::auth::dto
   {
     std::string session_id;
     std::string display_name;
+    std::string username;
+    std::string bio;
+    std::string website_url;
+    std::string github_url;
+    bool public_profile_enabled{false};
   };
 
   struct ChangePasswordRequest

@@ -62,6 +62,43 @@ export class ApiClient {
     return this.request<T>('POST', path, body);
   }
 
+  async postRaw<T>(path: string, body: BodyInit, contentType: string): Promise<T> {
+    this.restoreSessionFromStorage();
+
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      'Content-Type': contentType
+    };
+
+    if (this.sessionId) {
+      if (this.authHeader === 'authorization' || this.authHeader === 'both') {
+        headers.Authorization = `Bearer ${this.sessionId}`;
+      }
+
+      if (this.authHeader === 'x-session-id' || this.authHeader === 'both') {
+        headers['X-Session-Id'] = this.sessionId;
+      }
+    }
+
+    let response: Response;
+
+    try {
+      response = await fetch(`${this.baseUrl}${path}`, {
+        method: 'POST',
+        headers,
+        body
+      });
+    } catch {
+      throw new ApiError(
+        0,
+        'network_error',
+        'Unable to reach the API. Check that the backend is running and that VITE_API_BASE_URL is correct.'
+      );
+    }
+
+    return this.parseResponse<T>(response, path);
+  }
+
   private async request<T>(method: string, path: string, body?: Record<string, unknown>): Promise<T> {
     this.restoreSessionFromStorage();
 
@@ -100,6 +137,11 @@ export class ApiClient {
         'Unable to reach the API. Check that the backend is running and that VITE_API_BASE_URL is correct.'
       );
     }
+    return this.parseResponse<T>(response, path);
+  }
+
+
+  private async parseResponse<T>(response: Response, path: string): Promise<T> {
     const text = await response.text();
     let payload: ApiResponse<T> | null = null;
 

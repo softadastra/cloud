@@ -61,6 +61,14 @@ namespace cloud::auth::services
     rixlib::auth::AuthResult<dto::AuthUserResponse> update_profile(
         const dto::UpdateProfileRequest &request);
 
+    rixlib::auth::AuthResult<dto::AuthUserResponse> update_avatar(
+        const std::string &session_id,
+        const std::string &avatar_url,
+        const std::string &avatar_storage_path);
+
+    rixlib::auth::AuthResult<std::string> delete_avatar(
+        const std::string &session_id);
+
     rixlib::auth::AuthStatus change_password(
         const dto::ChangePasswordRequest &request);
 

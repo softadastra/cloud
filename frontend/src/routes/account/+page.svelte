@@ -1,17 +1,36 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import { browser } from '$app/environment';
   import { onMount } from 'svelte';
   import {
     changePassword as changePasswordApi,
-    updateProfile
+    deleteAvatar,
+    updateProfile,
+    uploadAvatar
   } from '$lib/api/auth';
   import { ApiError } from '$lib/api/types';
+  import type { User } from '$lib/api/types';
   import InlineError from '$lib/components/InlineError.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import { auth } from '$lib/stores/auth';
 
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? (browser ? `${window.location.protocol}//${window.location.hostname}:8080` : '');
+
   let displayName = '';
+  let username = '';
+  let bio = '';
+  let websiteUrl = '';
+  let githubUrl = '';
+  let publicProfileEnabled = false;
+
   let savedDisplayName = '';
+  let savedUsername = '';
+  let savedBio = '';
+  let savedWebsiteUrl = '';
+  let savedGithubUrl = '';
+  let savedPublicProfileEnabled = false;
+
+  let avatarInput: HTMLInputElement;
 
   let currentPassword = '';
   let newPassword = '';
@@ -27,6 +46,8 @@
 
   let savingProfile = false;
   let savingPassword = false;
+  let uploadingAvatar = false;
+  let deletingAvatar = false;
 
   let copiedUserId = false;
   let copyResetTimer:
@@ -46,9 +67,24 @@
     .toUpperCase();
 
   $: normalizedDisplayName = displayName.trim();
+  $: normalizedUsername = username.trim().toLowerCase();
+  $: normalizedBio = bio.trim();
+  $: normalizedWebsiteUrl = websiteUrl.trim();
+  $: normalizedGithubUrl = githubUrl.trim();
+
+  $: avatarUrl = user?.avatar_url
+    ? user.avatar_url.startsWith('http')
+      ? user.avatar_url
+      : `${API_BASE_URL}${user.avatar_url}`
+    : '';
 
   $: profileChanged =
-    normalizedDisplayName !== savedDisplayName;
+    normalizedDisplayName !== savedDisplayName ||
+    normalizedUsername !== savedUsername ||
+    normalizedBio !== savedBio ||
+    normalizedWebsiteUrl !== savedWebsiteUrl ||
+    normalizedGithubUrl !== savedGithubUrl ||
+    publicProfileEnabled !== savedPublicProfileEnabled;
 
   $: passwordsMatch =
     !confirmNewPassword ||
@@ -157,17 +193,18 @@
     try {
       const updated = await updateProfile(
         currentSession.id,
-        normalizedDisplayName
+        {
+          display_name: normalizedDisplayName,
+          username: normalizedUsername,
+          bio: normalizedBio,
+          website_url: normalizedWebsiteUrl,
+          github_url: normalizedGithubUrl,
+          public_profile_enabled: publicProfileEnabled
+        }
       );
 
       auth.setUser(updated.user);
-
-      displayName =
-        updated.user.display_name ||
-        updated.user.name ||
-        '';
-
-      savedDisplayName = displayName.trim();
+      syncProfileForm(updated.user);
 
       profileMessage = 'Profile updated.';
     } catch (err) {
@@ -177,6 +214,89 @@
           : 'Unable to update profile.';
     } finally {
       savingProfile = false;
+    }
+  }
+
+  function syncProfileForm(nextUser: User | null) {
+    displayName =
+      nextUser?.display_name ||
+      nextUser?.name ||
+      '';
+    username = nextUser?.username || '';
+    bio = nextUser?.bio || '';
+    websiteUrl = nextUser?.website_url || '';
+    githubUrl = nextUser?.github_url || '';
+    publicProfileEnabled = Boolean(nextUser?.public_profile_enabled);
+
+    savedDisplayName = displayName.trim();
+    savedUsername = username.trim().toLowerCase();
+    savedBio = bio.trim();
+    savedWebsiteUrl = websiteUrl.trim();
+    savedGithubUrl = githubUrl.trim();
+    savedPublicProfileEnabled = publicProfileEnabled;
+  }
+
+  function openAvatarPicker() {
+    avatarInput?.click();
+  }
+
+  async function handleAvatarChange(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    clearMessages();
+
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      error = 'Avatar must be a JPG, PNG or WebP image.';
+      input.value = '';
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      error = 'Avatar image must be 2MB or smaller.';
+      input.value = '';
+      return;
+    }
+
+    uploadingAvatar = true;
+
+    try {
+      const updated = await uploadAvatar(file);
+      auth.setUser(updated.user);
+      profileMessage = 'Avatar updated.';
+    } catch (err) {
+      error =
+        err instanceof ApiError
+          ? err.message
+          : 'Unable to upload avatar.';
+    } finally {
+      uploadingAvatar = false;
+      input.value = '';
+    }
+  }
+
+  async function removeAvatar() {
+    clearMessages();
+    deletingAvatar = true;
+
+    try {
+      await deleteAvatar();
+      auth.setUser({
+        ...user!,
+        avatar_url: ''
+      });
+      profileMessage = 'Avatar removed.';
+    } catch (err) {
+      error =
+        err instanceof ApiError
+          ? err.message
+          : 'Unable to remove avatar.';
+    } finally {
+      deletingAvatar = false;
     }
   }
 
@@ -250,12 +370,7 @@
       return;
     }
 
-    displayName =
-      user.display_name ||
-      user.name ||
-      '';
-
-    savedDisplayName = displayName.trim();
+    syncProfileForm(user);
 
     return () => {
       if (copyResetTimer) {
@@ -291,7 +406,11 @@
           class="account-avatar"
           aria-hidden="true"
         >
-          {initial}
+          {#if avatarUrl}
+            <img src={avatarUrl} alt="" />
+          {:else}
+            {initial}
+          {/if}
         </span>
 
         <div>
@@ -463,20 +582,59 @@
         class="settings-form"
         onsubmit={handleProfileSubmit}
       >
-        <label>
-          Email address
+        <div class="avatar-editor">
+          <div
+            class="profile-avatar"
+            aria-hidden="true"
+          >
+            {#if avatarUrl}
+              <img
+                src={avatarUrl}
+                alt=""
+              />
+            {:else}
+              <span>{initial}</span>
+            {/if}
+          </div>
 
-          <input
-            value={user?.email ?? ''}
-            type="email"
-            readonly
-            aria-describedby="email-help"
-          />
+          <div class="avatar-controls">
+            <div>
+              <strong>Profile photo</strong>
+              <p>JPG, PNG or WebP. Max 2MB.</p>
+            </div>
 
-          <small id="email-help">
-            Email address changes are not available yet.
-          </small>
-        </label>
+            <input
+              bind:this={avatarInput}
+              class="avatar-input"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onchange={handleAvatarChange}
+            />
+
+            <div class="avatar-actions">
+              <button
+                type="button"
+                onclick={openAvatarPicker}
+                disabled={uploadingAvatar}
+              >
+                {uploadingAvatar
+                  ? 'Uploading…'
+                  : 'Upload new photo'}
+              </button>
+
+              <button
+                class="secondary-button"
+                type="button"
+                onclick={removeAvatar}
+                disabled={deletingAvatar || !user?.avatar_url}
+              >
+                {deletingAvatar
+                  ? 'Removing…'
+                  : 'Remove photo'}
+              </button>
+            </div>
+          </div>
+        </div>
 
         <label>
           Display name
@@ -484,14 +642,68 @@
           <input
             bind:value={displayName}
             placeholder="Your name"
-            required
             autocomplete="name"
+            maxlength="80"
+          />
+        </label>
+
+        <label>
+          Username
+
+          <input
+            bind:value={username}
+            placeholder="username"
+            autocomplete="username"
+            maxlength="32"
           />
 
           <small>
-            This name is used in workspace activity and
-            account information.
+            Usernames use letters, numbers, hyphen or underscore.
           </small>
+        </label>
+
+        <label>
+          Bio
+
+          <textarea
+            bind:value={bio}
+            placeholder="Short profile bio"
+            maxlength="500"
+            rows="4"
+          ></textarea>
+        </label>
+
+        <div class="profile-url-grid">
+          <label>
+            Website URL
+
+            <input
+              bind:value={websiteUrl}
+              placeholder="https://example.com"
+              type="url"
+              maxlength="200"
+            />
+          </label>
+
+          <label>
+            GitHub URL
+
+            <input
+              bind:value={githubUrl}
+              placeholder="https://github.com/user"
+              type="url"
+              maxlength="200"
+            />
+          </label>
+        </div>
+
+        <label class="checkbox-row">
+          <input
+            bind:checked={publicProfileEnabled}
+            type="checkbox"
+          />
+
+          <span>Public profile enabled</span>
         </label>
 
         {#if profileMessage}
@@ -508,7 +720,6 @@
             type="submit"
             disabled={
               savingProfile ||
-              !normalizedDisplayName ||
               !profileChanged
             }
           >
@@ -768,12 +979,20 @@
     height: 46px;
     flex: 0 0 auto;
     place-items: center;
+    overflow: hidden;
     border: 1px solid var(--brand-line);
     border-radius: 50%;
     background: var(--brand-faint);
     color: var(--brand-bright);
     font-size: 16px;
     font-weight: 700;
+  }
+
+  .account-avatar img,
+  .profile-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
   }
 
   .account-identity > div {
@@ -1000,10 +1219,82 @@
     line-height: 1.45;
   }
 
-  .settings-form input[readonly] {
+
+  .avatar-editor {
+    display: grid;
+    grid-template-columns: 72px minmax(0, 1fr);
+    gap: 14px;
+    align-items: center;
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius-sm);
     background: var(--bg-ink-soft);
+    padding: 12px;
+  }
+
+  .profile-avatar {
+    display: grid;
+    width: 64px;
+    height: 64px;
+    place-items: center;
+    overflow: hidden;
+    border: 1px solid var(--brand-line);
+    border-radius: 50%;
+    background: var(--brand-faint);
+    color: var(--brand-bright);
+    font-size: 22px;
+    font-weight: 700;
+  }
+
+  .avatar-controls {
+    display: grid;
+    min-width: 0;
+    gap: 10px;
+  }
+
+  .avatar-controls strong {
+    color: var(--text);
+    font-size: 12px;
+  }
+
+  .avatar-controls p {
+    margin-top: 3px;
     color: var(--text-muted);
-    cursor: not-allowed;
+    font-size: 10.5px;
+  }
+
+  .avatar-input {
+    display: none;
+  }
+
+  .avatar-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .secondary-button {
+    background: transparent;
+    color: var(--text-soft);
+  }
+
+  .profile-url-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .checkbox-row {
+    display: flex !important;
+    align-items: center;
+    gap: 9px;
+    color: var(--text-soft);
+    font-size: 12px;
+  }
+
+  .checkbox-row input {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 auto;
   }
 
   .new-password-grid {
@@ -1109,7 +1400,8 @@
       grid-template-columns: 1fr;
     }
 
-    .new-password-grid {
+    .new-password-grid,
+    .profile-url-grid {
       grid-template-columns: 1fr;
     }
   }
@@ -1120,8 +1412,13 @@
       gap: 4px;
     }
 
-    .form-actions button {
+    .form-actions button,
+    .avatar-actions button {
       width: 100%;
+    }
+
+    .avatar-editor {
+      grid-template-columns: 1fr;
     }
 
     .settings-form {

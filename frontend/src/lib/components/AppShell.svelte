@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import { browser } from '$app/environment';
   import { page } from '$app/stores';
   import { onMount } from 'svelte';
   import AccessScopeBadge from '$lib/components/AccessScopeBadge.svelte';
@@ -7,6 +8,8 @@
   import { auth } from '$lib/stores/auth';
   import { notifications } from '$lib/stores/notifications';
   import { workspaceContext } from '$lib/stores/workspace';
+
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? (browser ? `${window.location.protocol}//${window.location.hostname}:8080` : '');
 
   const SIDEBAR_MIN_WIDTH = 232;
   const SIDEBAR_MAX_WIDTH = 360;
@@ -142,6 +145,12 @@
   )
     .slice(0, 1)
     .toUpperCase();
+
+  $: accountAvatarUrl = $auth.user?.avatar_url
+    ? $auth.user.avatar_url.startsWith('http')
+      ? $auth.user.avatar_url
+      : `${API_BASE_URL}${$auth.user.avatar_url}`
+    : '';
 
   $: unread = $notifications.unreadCount;
 
@@ -742,7 +751,11 @@
               class="account-row__avatar"
               aria-hidden="true"
             >
-              {initial}
+              {#if accountAvatarUrl}
+                <img src={accountAvatarUrl} alt="" />
+              {:else}
+                {initial}
+              {/if}
             </span>
 
             <span class="account-row__identity">
@@ -1088,11 +1101,18 @@
     width: 32px;
     height: 32px;
     place-items: center;
+    overflow: hidden;
     border-radius: 50%;
     background: var(--brand);
     color: var(--brand-ink);
     font-size: 11px;
     font-weight: 700;
+  }
+
+  .account-row__avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
   }
 
   .account-row__identity {

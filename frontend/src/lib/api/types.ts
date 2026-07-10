@@ -23,14 +23,32 @@ export class ApiError extends Error {
   }
 }
 
-export type User = {
+export type UserProfile = {
+  display_name?: string;
+  username?: string;
+  bio?: string;
+  avatar_url?: string;
+  website_url?: string;
+  github_url?: string;
+  public_profile_enabled?: boolean;
+};
+
+export type User = UserProfile & {
   id: string;
   name: string;
   email: string;
   email_verified: boolean;
   active: boolean;
   created_at?: number;
-  display_name?: string;
+};
+
+export type UpdateProfilePayload = {
+  display_name: string;
+  username: string;
+  bio: string;
+  website_url: string;
+  github_url: string;
+  public_profile_enabled: boolean;
 };
 
 export type Session = {

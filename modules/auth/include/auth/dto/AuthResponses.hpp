@@ -27,6 +27,12 @@ namespace cloud::auth::dto
     std::string id;
     std::string name;
     std::string display_name;
+    std::string username;
+    std::string bio;
+    std::string avatar_url;
+    std::string website_url;
+    std::string github_url;
+    bool public_profile_enabled{false};
     std::string email;
     bool email_verified{false};
     bool active{true};
@@ -38,6 +44,12 @@ namespace cloud::auth::dto
           "id", id,
           "name", name,
           "display_name", display_name,
+          "username", username,
+          "bio", bio,
+          "avatar_url", avatar_url,
+          "website_url", website_url,
+          "github_url", github_url,
+          "public_profile_enabled", public_profile_enabled,
           "email", email,
           "email_verified", email_verified,
           "active", active,
