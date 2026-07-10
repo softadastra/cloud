@@ -45,6 +45,10 @@
   $: currentRole = selectedWorkspace?.current_user_role ?? 'viewer';
   $: canManage = canManageTokens(currentRole);
 
+  $: activeTokens = tokens.filter(
+    (token) => !token.revoked && !isExpired(token.expires_at)
+  ).length;
+
   $: globalWorkspaceId =
     $workspaceContext.selectedWorkspace?.id ?? '';
 
@@ -363,6 +367,8 @@
   <title>Tokens | Softadastra Cloud</title>
 </svelte:head>
 
+<svelte:window onkeydown={handleModalKeydown} />
+
 <PageHeader
   eyebrow="CLI"
   title="Tokens"
@@ -379,14 +385,33 @@
         success = '';
       }}
     >
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 5v14M5 12h14" />
+      </svg>
       New token
     </button>
   {/if}
 </PageHeader>
 
-<p class="page-description">
-  Tokens allow the Vix CLI to access this workspace.
-</p>
+<div class="page-introduction">
+  <p>
+    Tokens allow the Vix CLI to access this workspace.
+  </p>
+
+  {#if !loading && canManage}
+    <div class="token-summary" aria-label="Token summary">
+      <span class="summary-stat">
+        <strong>{activeTokens}</strong>
+        <span class="summary-label">active</span>
+      </span>
+
+      <span class="summary-stat">
+        <strong>{tokens.length}</strong>
+        <span class="summary-label">total</span>
+      </span>
+    </div>
+  {/if}
+</div>
 
 <InlineError message={error} />
 
@@ -400,6 +425,7 @@
   <section class="token-reveal">
     <div class="section-header">
       <div>
+        <span class="eyebrow">Save this now</span>
         <h2>New token</h2>
         <p>Copy this value now. It will not be displayed again.</p>
       </div>
@@ -441,6 +467,7 @@
   <section class="create-section">
     <div class="section-header">
       <div>
+        <span class="eyebrow">New token</span>
         <h2>Create token</h2>
         <p>Use a name that identifies the machine using this token.</p>
       </div>
@@ -493,22 +520,30 @@
 {/if}
 
 <section class="tokens-section">
-  <div class="tokens-header">
-    <h2>Workspace tokens</h2>
-    <span>{tokens.length}</span>
+  <div class="section-heading section-heading--bordered">
+    <div>
+      <h2>Workspace tokens</h2>
+      <p>Credentials that can authenticate the Vix CLI.</p>
+    </div>
+
+    <span class="section-count">{tokens.length}</span>
   </div>
 
   {#if loading}
     <p class="loading-text">Loading tokens…</p>
   {:else if !canManage}
-    <ReadOnlyNotice
-      message="Token details are restricted to workspace owners and admins."
-    />
+    <div class="section-notice">
+      <ReadOnlyNotice
+        message="Token details are restricted to workspace owners and admins."
+      />
+    </div>
   {:else if tokens.length === 0}
-    <EmptyState
-      title="No tokens yet"
-      body="Create a token before connecting the Vix CLI."
-    />
+    <div class="empty-wrapper">
+      <EmptyState
+        title="No tokens yet"
+        body="Create a token before connecting the Vix CLI."
+      />
+    </div>
   {:else}
     <div class="token-list">
       {#each tokens as token (token.id)}
@@ -523,9 +558,8 @@
               <strong>{token.name}</strong>
 
               <span
-                class:inactive={
-                  token.revoked || isExpired(token.expires_at)
-                }
+                class:state-revoked={token.revoked}
+                class:state-expired={!token.revoked && isExpired(token.expires_at)}
                 class="token-state"
               >
                 {tokenStatus(token)}
@@ -548,8 +582,8 @@
 
               {#if token.scopes.length > 0}
                 <span class="permission-values">
-                  {#each token.scopes as scope, index}
-                    <code>{scope}</code>{#if index < token.scopes.length - 1}<span>,</span>{/if}
+                  {#each token.scopes as scope}
+                    <code>{scope}</code>
                   {/each}
                 </span>
               {:else}
@@ -612,14 +646,14 @@
       </div>
 
       <div class="confirm-modal__actions">
-       <button
-        class="modal-cancel-button"
-        type="button"
-        disabled={revoking === tokenToRevoke.id}
-        onclick={closeRevokeModal}
-      >
-        Cancel
-      </button>
+        <button
+          class="modal-cancel-button"
+          type="button"
+          disabled={revoking === tokenToRevoke.id}
+          onclick={closeRevokeModal}
+        >
+          Cancel
+        </button>
 
         <button
           class="modal-revoke-button"
@@ -635,32 +669,80 @@
 {/if}
 
 <style>
-  .page-description {
-    max-width: 680px;
+  /* ── Intro ──────────────────────────────────────────── */
+
+  .page-introduction {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
     margin: -8px 0 18px;
-    color: var(--text-muted);
-    font-size: 13px;
   }
 
-  .new-token-button {
-    border-color: var(--brand);
-    background: var(--brand);
-    color: var(--brand-ink);
+  .page-introduction > p {
+    max-width: 680px;
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.6;
   }
+
+  .token-summary {
+    display: flex;
+    align-items: stretch;
+    flex: 0 0 auto;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--bg-panel);
+    overflow: hidden;
+  }
+
+  .summary-stat {
+    display: grid;
+    gap: 1px;
+    padding: 7px 14px;
+    border-right: 1px solid var(--line-soft);
+    text-align: center;
+  }
+
+  .summary-stat:last-child {
+    border-right: 0;
+  }
+
+  .summary-stat strong {
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 15px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
+  }
+
+  .summary-label {
+    color: var(--text-muted);
+    font-size: 10px;
+  }
+
+  .new-token-button svg {
+    width: 14px;
+    height: 14px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+  }
+
+  /* ── Reveal + create panels ─────────────────────────── */
 
   .token-reveal,
   .create-section {
     display: grid;
     gap: 15px;
     margin-bottom: 18px;
-    border: 1px solid var(--line);
+    border: 1px solid var(--brand-line);
     border-radius: var(--radius-md);
     background: var(--bg-panel);
     padding: 17px;
-  }
-
-  .token-reveal {
-    border-color: var(--brand-line);
+    box-shadow: inset 3px 0 0 var(--brand);
   }
 
   .section-header {
@@ -672,11 +754,10 @@
 
   .section-header > div {
     display: grid;
-    gap: 3px;
+    gap: 4px;
   }
 
-  .section-header h2,
-  .tokens-header h2 {
+  .section-header h2 {
     font-size: 14px;
   }
 
@@ -720,17 +801,23 @@
     background: var(--bg-elevated);
     color: var(--text-soft);
     padding: 0;
+    transition:
+      border-color var(--speed) var(--ease),
+      background var(--speed) var(--ease),
+      color var(--speed) var(--ease);
   }
 
   .copy-button:hover:not(:disabled) {
-    border-color: var(--brand-line);
+    border-color: var(--line-strong);
     background: var(--bg-panel-strong);
     color: var(--text);
   }
 
+  /* Copied = success → green flat */
   .copy-button.copied {
-    border-color: var(--brand-line);
-    color: var(--brand);
+    border-color: var(--green-line);
+    background: var(--green-faint);
+    color: var(--green-soft);
   }
 
   .copy-button svg {
@@ -748,10 +835,21 @@
     font-size: 12px;
   }
 
+  .token-command code {
+    padding: 1px 6px;
+    border: 1px solid var(--line-ink);
+    border-radius: 4px;
+    background: var(--bg-ink);
+    color: var(--brand-bright);
+    font-size: 11px;
+  }
+
   .form-actions {
     display: flex;
     justify-content: flex-end;
     gap: 8px;
+    border-top: 1px solid var(--line-soft);
+    padding-top: 14px;
   }
 
   .cancel-button {
@@ -761,43 +859,76 @@
   }
 
   .cancel-button:hover:not(:disabled) {
+    border-color: rgba(255, 255, 255, 0.18);
     background: var(--bg-elevated);
     color: var(--text);
   }
 
+  /* ── Tokens list ────────────────────────────────────── */
+
   .tokens-section {
-    margin-top: 6px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--bg-panel);
+    overflow: hidden;
   }
 
-  .tokens-header {
+  .section-heading {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 10px;
+    gap: 16px;
   }
 
-  .tokens-header > span {
+  .section-heading--bordered {
+    padding: 13px 16px;
+    border-bottom: 1px solid var(--line-soft);
+    background: var(--bg-panel-strong);
+  }
+
+  .section-heading > div {
+    display: grid;
+    gap: 3px;
+  }
+
+  .section-heading h2 {
+    font-size: 13.5px;
+  }
+
+  .section-heading p {
+    color: var(--text-muted);
+    font-size: 11.5px;
+    line-height: 1.5;
+  }
+
+  .section-count {
     display: inline-grid;
     min-width: 24px;
     height: 22px;
     place-items: center;
     border: 1px solid var(--line-strong);
     border-radius: 999px;
+    background: var(--bg-elevated);
     color: var(--text-muted);
     padding: 0 7px;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: 10.5px;
   }
 
   .loading-text {
-    padding: 18px 0;
+    min-height: 72px;
+    padding: 20px 16px;
     color: var(--text-muted);
+    font-size: 12.5px;
+  }
+
+  .empty-wrapper,
+  .section-notice {
+    padding: 14px;
   }
 
   .token-list {
-    border-top: 1px solid var(--line);
-    border-bottom: 1px solid var(--line);
+    display: grid;
   }
 
   .token-row {
@@ -806,29 +937,34 @@
     gap: 18px;
     align-items: center;
     min-width: 0;
-    padding: 14px 2px;
+    padding: 14px 16px;
     border-bottom: 1px solid var(--line-soft);
+    transition: background var(--speed) var(--ease);
   }
 
   .token-row:last-child {
     border-bottom: 0;
   }
 
+  .token-row:hover {
+    background: var(--bg-elevated);
+  }
+
   .token-row--inactive .token-content {
-    opacity: 0.62;
+    opacity: 0.6;
   }
 
   .token-content {
     display: grid;
     min-width: 0;
-    gap: 6px;
+    gap: 7px;
   }
 
   .token-primary {
     display: flex;
     min-width: 0;
     align-items: center;
-    gap: 8px;
+    gap: 9px;
     flex-wrap: wrap;
   }
 
@@ -838,19 +974,29 @@
     font-weight: 600;
   }
 
+  /* Active token state = green flat (success/valid) */
   .token-state {
     display: inline-flex;
     min-height: 20px;
     align-items: center;
-    border: 1px solid var(--line-strong);
+    border: 1px solid var(--green-line);
     border-radius: 999px;
-    background: var(--bg-elevated);
-    color: var(--text-soft);
-    padding: 0 7px;
+    background: var(--green-faint);
+    color: var(--green-soft);
+    padding: 0 8px;
     font-size: 10.5px;
+    font-weight: 550;
   }
 
-  .token-state.inactive {
+  /* Expired = caution → warning flat */
+  .token-state.state-expired {
+    border-color: var(--warning-line);
+    background: var(--warning-faint);
+    color: var(--warning);
+  }
+
+  /* Revoked = terminal → danger flat */
+  .token-state.state-revoked {
     border-color: var(--danger-line);
     background: var(--danger-faint);
     color: var(--danger);
@@ -870,6 +1016,7 @@
     min-width: 0;
     align-items: baseline;
     gap: 9px;
+    flex-wrap: wrap;
   }
 
   .permission-label {
@@ -881,16 +1028,19 @@
   .permission-values {
     display: flex;
     min-width: 0;
-    align-items: baseline;
-    gap: 4px;
+    align-items: center;
+    gap: 5px;
     flex-wrap: wrap;
-    color: var(--text-muted);
   }
 
   .permission-values code {
+    padding: 1px 7px;
+    border: 1px solid var(--line-ink);
+    border-radius: 4px;
+    background: var(--bg-ink);
     color: var(--text-soft);
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 10px;
     overflow-wrap: anywhere;
   }
 
@@ -909,7 +1059,43 @@
   }
 
   .revoke-button:hover:not(:disabled) {
+    border-color: var(--danger);
     background: var(--danger-faint);
+  }
+
+  /* ── Confirmation modal ─────────────────────────────── */
+
+  .modal-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+  }
+
+  .modal-backdrop {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    min-height: 100%;
+    border: 0;
+    border-radius: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(3px);
+    cursor: default;
+  }
+
+  .modal-backdrop:hover:not(:disabled),
+  .modal-backdrop:active {
+    background: rgba(0, 0, 0, 0.7);
+    transform: none;
+  }
+
+  .modal-backdrop:focus,
+  .modal-backdrop:focus-visible {
+    outline: none;
+    box-shadow: none;
   }
 
   .confirm-modal {
@@ -928,54 +1114,13 @@
     box-shadow: var(--shadow-deep);
   }
 
-  .modal-layer {
-    position: fixed;
-    inset: 0;
-    z-index: 100;
-    display: grid;
-    place-items: center;
-    padding: 20px;
+  .confirm-modal:focus,
+  .confirm-modal:focus-visible {
+    outline: none;
   }
-
-.modal-backdrop {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  min-height: 100%;
-  border: 0;
-  border-radius: 0;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(3px);
-  cursor: default;
-}
-
-.modal-backdrop:hover:not(:disabled),
-.modal-backdrop:active {
-  background: rgba(0, 0, 0, 0.7);
-  transform: none;
-}
-
-.modal-backdrop:focus,
-.modal-backdrop:focus-visible {
-  outline: none;
-  box-shadow: none;
-}
 
   .confirm-modal::backdrop {
     background: transparent;
-  }
-
-  .confirm-modal {
-    position: relative;
-    z-index: 1;
-    display: grid;
-    width: min(100%, 440px);
-    gap: 16px;
-    border: 1px solid var(--line-strong);
-    border-radius: var(--radius-md);
-    background: var(--bg-panel);
-    padding: 20px;
-    box-shadow: var(--shadow-deep);
   }
 
   .confirm-modal__icon {
@@ -1050,17 +1195,22 @@
     border-color: #fca5a5;
   }
 
-  @media (max-width: 520px) {
-    .confirm-modal__actions {
-      flex-direction: column-reverse;
-    }
-
-    .confirm-modal__actions button {
-      width: 100%;
-    }
-  }
+  /* ── Responsive ─────────────────────────────────────── */
 
   @media (max-width: 620px) {
+    .page-introduction {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .token-summary {
+      width: 100%;
+    }
+
+    .summary-stat {
+      flex: 1 1 0;
+    }
+
     .token-reveal,
     .create-section {
       padding: 14px;
@@ -1069,13 +1219,12 @@
     .token-row {
       grid-template-columns: 1fr;
       gap: 11px;
-      padding: 14px 0;
     }
 
     .token-permissions {
       align-items: flex-start;
       flex-direction: column;
-      gap: 3px;
+      gap: 5px;
     }
 
     .revoke-button {
@@ -1087,6 +1236,17 @@
     }
 
     .form-actions button {
+      width: 100%;
+    }
+  }
+
+  @media (max-width: 520px) {
+    .confirm-modal__actions {
+      align-items: stretch;
+      flex-direction: column-reverse;
+    }
+
+    .confirm-modal__actions button {
       width: 100%;
     }
   }

@@ -380,25 +380,25 @@
   aria-label="Feedback summary"
 >
   <div class="summary-item">
-    <span>Total</span>
+    <span class="eyebrow">Total</span>
     <strong>{feedback.length}</strong>
     <small>Submitted feedback</small>
   </div>
 
   <div class="summary-item">
-    <span>Active</span>
+    <span class="eyebrow">Active</span>
     <strong>{activeCount}</strong>
     <small>Still being reviewed</small>
   </div>
 
   <div class="summary-item">
-    <span>Bugs</span>
+    <span class="eyebrow">Bugs</span>
     <strong>{bugCount}</strong>
     <small>Reported problems</small>
   </div>
 
   <div class="summary-item">
-    <span>Ideas</span>
+    <span class="eyebrow">Ideas</span>
     <strong>{ideaCount}</strong>
     <small>Suggested directions</small>
   </div>
@@ -408,6 +408,7 @@
   <aside class="feedback-form-panel">
     <div class="form-header">
       <div>
+        <span class="eyebrow">New</span>
         <h2>Send feedback</h2>
 
         <p>
@@ -472,7 +473,10 @@
       </label>
 
       {#if $workspaceContext.selectedWorkspace}
-        <label class="workspace-option">
+        <label
+          class:checked={includeWorkspace}
+          class="workspace-option"
+        >
           <input
             bind:checked={includeWorkspace}
             type="checkbox"
@@ -636,7 +640,10 @@
               onclick={() =>
                 toggleFeedback(item.id)}
             >
-              <span class="feedback-category">
+              <span
+                class="feedback-category"
+                data-category={item.category}
+              >
                 {categoryLabel(item.category)
                   .slice(0, 1)
                   .toUpperCase()}
@@ -682,7 +689,7 @@
               <div class="feedback-details">
                 <div class="details-heading">
                   <div>
-                    <span>Full message</span>
+                    <span class="eyebrow">Full message</span>
 
                     <strong>{item.title}</strong>
                   </div>
@@ -706,7 +713,7 @@
 
                 <dl class="feedback-properties">
                   <div>
-                    <dt>Category</dt>
+                    <dt class="eyebrow">Category</dt>
 
                     <dd>
                       {categoryLabel(item.category)}
@@ -714,7 +721,7 @@
                   </div>
 
                   <div>
-                    <dt>Status</dt>
+                    <dt class="eyebrow">Status</dt>
 
                     <dd>
                       {statusLabel(item.status)}
@@ -722,7 +729,7 @@
                   </div>
 
                   <div>
-                    <dt>Submitted</dt>
+                    <dt class="eyebrow">Submitted</dt>
 
                     <dd>
                       {formatDate(item.created_at)}
@@ -747,11 +754,48 @@
     line-height: 1.6;
   }
 
-  .feedback-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
-  .feedback-actions button { min-height: 32px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg-elevated); padding: 0 10px; color: var(--text-strong); font-size: 12px; font-weight: 700; }
-  .feedback-actions .danger-link { border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); color: var(--danger); }
+  /* ── Detail actions ─────────────────────────────────── */
 
-  /* Summary */
+  .feedback-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .feedback-actions button {
+    min-height: 32px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sm);
+    background: var(--bg-elevated);
+    padding: 0 12px;
+    color: var(--text-soft);
+    font-size: 12px;
+    font-weight: 550;
+    transition:
+      border-color var(--speed) var(--ease),
+      background var(--speed) var(--ease),
+      color var(--speed) var(--ease);
+  }
+
+  .feedback-actions button:hover:not(:disabled) {
+    border-color: rgba(255, 255, 255, 0.18);
+    background: var(--bg-panel-strong);
+    color: var(--text);
+  }
+
+  .feedback-actions .danger-link {
+    border-color: var(--danger-line);
+    background: transparent;
+    color: var(--danger);
+  }
+
+  .feedback-actions .danger-link:hover:not(:disabled) {
+    border-color: var(--danger);
+    background: var(--danger-faint);
+    color: var(--danger);
+  }
+
+  /* ── Summary rail ───────────────────────────────────── */
 
   .feedback-summary {
     display: grid;
@@ -764,35 +808,59 @@
   }
 
   .summary-item {
+    position: relative;
     display: grid;
     min-width: 0;
-    gap: 3px;
-    padding: 14px 16px;
+    gap: 4px;
+    padding: 15px 16px 13px;
     border-right: 1px solid var(--line-soft);
+    transition: background var(--speed) var(--ease);
+  }
+
+  .summary-item::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--brand);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform var(--speed) var(--ease);
+  }
+
+  .summary-item:hover {
+    background: var(--bg-panel-strong);
+  }
+
+  .summary-item:hover::before {
+    transform: scaleX(1);
   }
 
   .summary-item:last-child {
     border-right: 0;
   }
 
-  .summary-item > span {
-    color: var(--text-muted);
-    font-size: 11px;
-  }
-
   .summary-item > strong {
     color: var(--text);
     font-family: var(--font-mono);
-    font-size: 19px;
+    font-size: 22px;
     font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
   }
 
   .summary-item > small {
+    min-width: 0;
     color: var(--text-faint);
     font-size: 10.5px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  /* Layout */
+  /* ── Layout ─────────────────────────────────────────── */
 
   .feedback-layout {
     display: grid;
@@ -823,8 +891,9 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: 14px;
-    padding: 14px 16px;
+    padding: 13px 16px;
     border-bottom: 1px solid var(--line-soft);
+    background: var(--bg-panel-strong);
   }
 
   .form-header > div,
@@ -861,7 +930,7 @@
     font-size: 10.5px;
   }
 
-  /* Form */
+  /* ── Form ───────────────────────────────────────────── */
 
   .feedback-form-panel form {
     display: grid;
@@ -903,6 +972,18 @@
     background: var(--bg-ink-soft);
     padding: 10px;
     cursor: pointer;
+    transition:
+      border-color var(--speed) var(--ease),
+      background var(--speed) var(--ease);
+  }
+
+  .workspace-option:hover {
+    border-color: var(--line-strong);
+  }
+
+  .workspace-option.checked {
+    border-color: var(--brand-line);
+    background: var(--brand-faint);
   }
 
   .workspace-option input {
@@ -926,6 +1007,10 @@
     font-weight: 550;
   }
 
+  .workspace-option.checked strong {
+    color: var(--brand-bright);
+  }
+
   .workspace-option small {
     overflow: hidden;
     color: var(--text-muted);
@@ -939,7 +1024,11 @@
     grid-template-columns: 16px minmax(0, 1fr);
     gap: 8px;
     align-items: start;
-    color: var(--text-muted);
+    border: 1px solid var(--warning-line);
+    border-radius: var(--radius-sm);
+    background: var(--warning-faint);
+    padding: 10px 12px;
+    color: var(--warning);
   }
 
   .privacy-note svg {
@@ -954,6 +1043,7 @@
   }
 
   .privacy-note p {
+    color: var(--warning);
     font-size: 10.5px;
     line-height: 1.5;
   }
@@ -965,7 +1055,7 @@
     padding-top: 14px;
   }
 
-  /* Toolbar */
+  /* ── Toolbar ────────────────────────────────────────── */
 
   .feedback-toolbar {
     display: grid;
@@ -1009,7 +1099,7 @@
     font-size: 12px;
   }
 
-  /* Feedback entries */
+  /* ── Feedback entries ───────────────────────────────── */
 
   .feedback-list {
     display: grid;
@@ -1045,13 +1135,15 @@
     padding: 12px 16px;
     color: var(--text);
     text-align: left;
+    transition: background var(--speed) var(--ease);
   }
 
   .feedback-row:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.018);
+    background: var(--bg-elevated);
     transform: none;
   }
 
+  /* Category chip — colour keyed to meaning, flat */
   .feedback-category {
     display: grid;
     width: 34px;
@@ -1065,6 +1157,30 @@
     font-weight: 650;
   }
 
+  .feedback-category[data-category='bug'] {
+    border-color: var(--danger-line);
+    background: var(--danger-faint);
+    color: var(--danger);
+  }
+
+  .feedback-category[data-category='idea'] {
+    border-color: var(--brand-line);
+    background: var(--brand-faint);
+    color: var(--brand-bright);
+  }
+
+  .feedback-category[data-category='improvement'] {
+    border-color: var(--green-line);
+    background: var(--green-faint);
+    color: var(--green-soft);
+  }
+
+  .feedback-category[data-category='question'] {
+    border-color: var(--info-line);
+    background: var(--info-faint);
+    color: var(--info);
+  }
+
   .feedback-identity {
     display: grid;
     min-width: 0;
@@ -1076,6 +1192,11 @@
     font-size: 12.5px;
     font-weight: 600;
     overflow-wrap: anywhere;
+    transition: color var(--speed) var(--ease);
+  }
+
+  .feedback-row:hover .feedback-identity > strong {
+    color: var(--brand-bright);
   }
 
   .feedback-metadata {
@@ -1089,7 +1210,7 @@
   }
 
   .category-label {
-    color: var(--brand-bright);
+    color: var(--text-muted);
     font-family: var(--font-mono);
     font-size: 9.5px;
     font-weight: 600;
@@ -1118,7 +1239,7 @@
     width: 16px;
     height: 16px;
     fill: none;
-    stroke: var(--text-muted);
+    stroke: var(--text-faint);
     stroke-width: 1.7;
     stroke-linecap: round;
     stroke-linejoin: round;
@@ -1127,12 +1248,16 @@
       stroke var(--speed) var(--ease);
   }
 
-  .row-chevron.rotated {
-    transform: rotate(90deg);
+  .feedback-row:hover .row-chevron {
     stroke: var(--text-soft);
   }
 
-  /* Expanded details */
+  .row-chevron.rotated {
+    transform: rotate(90deg);
+    stroke: var(--brand);
+  }
+
+  /* ── Expanded details ───────────────────────────────── */
 
   .feedback-details {
     display: grid;
@@ -1152,12 +1277,7 @@
   .details-heading > div {
     display: grid;
     min-width: 0;
-    gap: 3px;
-  }
-
-  .details-heading span {
-    color: var(--text-muted);
-    font-size: 10px;
+    gap: 4px;
   }
 
   .details-heading strong {
@@ -1186,18 +1306,13 @@
   .feedback-properties > div {
     display: grid;
     min-width: 0;
-    gap: 3px;
+    gap: 4px;
     padding: 10px 12px;
     border-right: 1px solid var(--line-soft);
   }
 
   .feedback-properties > div:last-child {
     border-right: 0;
-  }
-
-  .feedback-properties dt {
-    color: var(--text-muted);
-    font-size: 9.5px;
   }
 
   .feedback-properties dd {
@@ -1207,6 +1322,8 @@
     font-weight: 550;
     overflow-wrap: anywhere;
   }
+
+  /* ── States ─────────────────────────────────────────── */
 
   .loading-state {
     min-height: 100px;
@@ -1242,18 +1359,20 @@
   .reset-filters-button {
     min-height: 30px;
     margin-top: 6px;
-    border-color: var(--info-line);
-    background: var(--info-faint);
-    color: var(--link);
-    padding: 0 11px;
+    border-color: var(--line-strong);
+    background: transparent;
+    color: var(--text-soft);
+    padding: 0 12px;
     font-size: 11px;
   }
 
   .reset-filters-button:hover:not(:disabled) {
-    border-color: var(--link);
-    background: rgba(107, 184, 255, 0.14);
-    color: var(--link-hover);
+    border-color: rgba(255, 255, 255, 0.18);
+    background: var(--bg-elevated);
+    color: var(--text);
   }
+
+  /* ── Responsive ─────────────────────────────────────── */
 
   @media (max-width: 980px) {
     .feedback-layout {

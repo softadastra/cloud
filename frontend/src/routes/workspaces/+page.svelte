@@ -526,8 +526,8 @@
   >
     <div class="directory-header">
       <div>
+        <span class="eyebrow">Directory</span>
         <h2>Workspaces</h2>
-        <p>Your available cloud environments.</p>
       </div>
 
       <span class="section-count">
@@ -653,37 +653,37 @@
 
         <dl class="workspace-summary">
           <div>
-            <dt>Your role</dt>
+            <dt class="eyebrow">Your role</dt>
             <dd>{roleLabel(currentRole)}</dd>
           </div>
 
           <div>
-            <dt>Access</dt>
+            <dt class="eyebrow">Access</dt>
             <dd>
               {accessLabel(selectedWorkspace.access_scope)}
             </dd>
           </div>
 
           <div>
-            <dt>Projects</dt>
+            <dt class="eyebrow">Projects</dt>
             <dd>{projects.length}</dd>
           </div>
 
           <div>
-            <dt>Active members</dt>
+            <dt class="eyebrow">Active members</dt>
             <dd>{activeMembers}</dd>
           </div>
 
           {#if canTokens}
             <div>
-              <dt>Active tokens</dt>
+              <dt class="eyebrow">Active tokens</dt>
               <dd>{activeTokens}</dd>
             </div>
           {/if}
         </dl>
 
         <div class="workspace-id-row">
-          <span>Workspace ID</span>
+          <span class="eyebrow">Workspace ID</span>
 
           <code>{selectedWorkspace.id}</code>
 
@@ -733,12 +733,18 @@
             href={`/projects?workspace_id=${selectedWorkspace.id}`}
           >
             Projects
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m9 18 6-6-6-6"></path>
+            </svg>
           </a>
 
           <a
             href={`/packages?workspace_id=${selectedWorkspace.id}`}
           >
             Packages
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m9 18 6-6-6-6"></path>
+            </svg>
           </a>
 
           {#if canMembers}
@@ -746,6 +752,9 @@
               href={`/members?workspace_id=${selectedWorkspace.id}`}
             >
               Manage members
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m9 18 6-6-6-6"></path>
+              </svg>
             </a>
           {/if}
 
@@ -754,6 +763,9 @@
               href={`/tokens?workspace_id=${selectedWorkspace.id}`}
             >
               Manage tokens
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m9 18 6-6-6-6"></path>
+              </svg>
             </a>
           {/if}
         </nav>
@@ -772,6 +784,7 @@
         >
           <div class="section-header">
             <div>
+              <span class="eyebrow">Settings</span>
               <h2 id="workspace-settings-title">Workspace settings</h2>
               <p>Update the workspace identity and logo.</p>
             </div>
@@ -842,7 +855,8 @@
         >
           <div class="section-header">
             <div>
-              <h2 id="workspace-danger-title">Danger zone</h2>
+              <span class="eyebrow danger-eyebrow">Danger zone</span>
+              <h2 id="workspace-danger-title">Irreversible actions</h2>
               <p>Suspending stops write actions. Deleting hides the workspace from normal use while keeping records for safety.</p>
             </div>
           </div>
@@ -1100,7 +1114,7 @@
     align-items: start;
   }
 
-  /* Workspace directory */
+  /* ── Workspace directory ────────────────────────────── */
 
   .workspace-directory {
     position: sticky;
@@ -1118,8 +1132,9 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: 14px;
-    padding: 14px 15px;
+    padding: 13px 15px;
     border-bottom: 1px solid var(--line-soft);
+    background: var(--bg-panel-strong);
   }
 
   .directory-header > div,
@@ -1134,7 +1149,6 @@
     font-size: 13px;
   }
 
-  .directory-header p,
   .section-header p {
     color: var(--text-muted);
     font-size: 11px;
@@ -1189,6 +1203,7 @@
   }
 
   .workspace-option {
+    position: relative;
     display: grid;
     grid-template-columns: 30px minmax(0, 1fr) auto;
     gap: 9px;
@@ -1202,6 +1217,7 @@
     background: transparent;
     color: var(--text);
     text-align: left;
+    transition: background var(--speed) var(--ease);
   }
 
   .workspace-option:last-child {
@@ -1259,7 +1275,7 @@
     padding: 10px;
   }
 
-  /* Workspace detail */
+  /* ── Workspace detail ───────────────────────────────── */
 
   .workspace-detail {
     display: grid;
@@ -1287,26 +1303,27 @@
     gap: 18px;
     padding: 16px;
     border-bottom: 1px solid var(--line-soft);
+    background: var(--bg-ink-soft);
   }
 
   .workspace-identity {
     display: flex;
     min-width: 0;
     align-items: center;
-    gap: 11px;
+    gap: 12px;
   }
 
   .workspace-identity > div {
     display: grid;
     min-width: 0;
-    gap: 4px;
+    gap: 5px;
   }
 
   .workspace-name-line {
     display: flex;
     min-width: 0;
     align-items: center;
-    gap: 8px;
+    gap: 9px;
     flex-wrap: wrap;
   }
 
@@ -1314,10 +1331,16 @@
     color: var(--text);
     font-size: 16px;
     font-weight: 600;
+    letter-spacing: -0.01em;
     overflow-wrap: anywhere;
   }
 
   .workspace-identity code {
+    width: fit-content;
+    padding: 2px 7px;
+    border: 1px solid var(--line-ink);
+    border-radius: 4px;
+    background: var(--bg-ink);
     color: var(--text-muted);
     font-size: 10.5px;
     overflow-wrap: anywhere;
@@ -1329,12 +1352,14 @@
     width: fit-content;
     min-height: 20px;
     align-items: center;
-    border: 1px solid var(--line-strong);
+    border: 1px solid var(--green-line);
     border-radius: 999px;
-    background: var(--bg-elevated);
-    color: var(--text-soft);
-    padding: 0 7px;
+    background: var(--green-faint);
+    color: var(--green-soft);
+    padding: 0 8px;
     font-size: 10px;
+    font-weight: 550;
+    text-transform: capitalize;
     white-space: nowrap;
   }
 
@@ -1345,25 +1370,19 @@
     color: var(--danger);
   }
 
-  .open-workspace-link,
-  .section-link,
-  .workspace-actions a {
-    color: var(--link);
-    font-weight: 550;
-  }
-
-  .open-workspace-link:hover,
-  .section-link:hover,
-  .workspace-actions a:hover {
-    color: var(--link-hover);
-  }
-
   .open-workspace-link {
     display: inline-flex;
     flex: 0 0 auto;
     align-items: center;
     gap: 5px;
+    color: var(--link);
     font-size: 11.5px;
+    font-weight: 550;
+    transition: color var(--speed) var(--ease);
+  }
+
+  .open-workspace-link:hover {
+    color: var(--link-hover);
   }
 
   .open-workspace-link svg,
@@ -1387,8 +1406,8 @@
   .workspace-summary > div {
     display: grid;
     min-width: 0;
-    gap: 4px;
-    padding: 12px 14px;
+    gap: 6px;
+    padding: 13px 14px;
     border-right: 1px solid var(--line-soft);
   }
 
@@ -1396,15 +1415,10 @@
     border-right: 0;
   }
 
-  .workspace-summary dt {
-    color: var(--text-muted);
-    font-size: 10.5px;
-  }
-
   .workspace-summary dd {
     margin: 0;
-    color: var(--text-soft);
-    font-size: 12px;
+    color: var(--text);
+    font-size: 12.5px;
     font-weight: 550;
     overflow-wrap: anywhere;
   }
@@ -1414,18 +1428,17 @@
     grid-template-columns: auto minmax(0, 1fr) 30px;
     gap: 10px;
     align-items: center;
-    padding: 10px 14px;
+    padding: 11px 14px;
     border-bottom: 1px solid var(--line-soft);
-  }
-
-  .workspace-id-row > span {
-    color: var(--text-muted);
-    font-size: 10.5px;
   }
 
   .workspace-id-row > code {
     min-width: 0;
     overflow: hidden;
+    padding: 3px 8px;
+    border: 1px solid var(--line-ink);
+    border-radius: 4px;
+    background: var(--bg-ink);
     color: var(--text-soft);
     font-size: 10.5px;
     text-overflow: ellipsis;
@@ -1442,6 +1455,10 @@
     background: transparent;
     color: var(--text-muted);
     padding: 0;
+    transition:
+      border-color var(--speed) var(--ease),
+      background var(--speed) var(--ease),
+      color var(--speed) var(--ease);
   }
 
   .copy-id-button:hover:not(:disabled) {
@@ -1450,8 +1467,9 @@
   }
 
   .copy-id-button.copied {
-    border-color: var(--brand-line);
-    color: var(--brand);
+    border-color: var(--green-line);
+    background: var(--green-faint);
+    color: var(--green-soft);
   }
 
   .copy-id-button svg {
@@ -1467,14 +1485,48 @@
   .workspace-actions {
     display: flex;
     align-items: center;
-    gap: 18px;
+    gap: 7px;
     flex-wrap: wrap;
-    padding: 11px 14px;
+    padding: 12px 14px;
+    background: var(--bg-panel-strong);
   }
 
   .workspace-actions a {
+    display: inline-flex;
+    min-height: 28px;
+    align-items: center;
+    gap: 5px;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    background: var(--bg-elevated);
+    color: var(--text-soft);
+    padding: 0 11px;
     font-size: 11.5px;
+    font-weight: 550;
+    transition:
+      border-color var(--speed) var(--ease),
+      background var(--speed) var(--ease),
+      color var(--speed) var(--ease);
   }
+
+  .workspace-actions a:hover {
+    border-color: var(--brand-line);
+    background: var(--brand-faint);
+    color: var(--brand-bright);
+  }
+
+  .workspace-actions svg {
+    width: 12px;
+    height: 12px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    opacity: 0.6;
+  }
+
+  /* ── Settings ───────────────────────────────────────── */
 
   .workspace-settings-grid {
     display: grid;
@@ -1491,7 +1543,7 @@
     min-width: 0;
     border: 1px solid var(--line-soft);
     border-radius: var(--radius-md);
-    background: var(--bg-elevated);
+    background: var(--bg-ink-soft);
     padding: 14px;
   }
 
@@ -1524,11 +1576,15 @@
     font-size: 12px;
     font-weight: 600;
     cursor: pointer;
+    transition:
+      border-color var(--speed) var(--ease),
+      background var(--speed) var(--ease),
+      color var(--speed) var(--ease);
   }
 
   .avatar-upload-button:hover {
     border-color: var(--brand);
-    background: var(--brand-soft);
+    background: var(--brand-glow);
   }
 
   .avatar-upload-button input {
@@ -1550,14 +1606,53 @@
     justify-self: start;
   }
 
-  @media (max-width: 860px) {
-    .workspace-settings-grid,
-    .workspace-settings-form {
-      grid-template-columns: 1fr;
-    }
+  /* ── Danger zone ────────────────────────────────────── */
+
+  .danger-zone {
+    border-color: var(--danger-line);
   }
 
-  /* Workspace content */
+  .danger-zone .section-header {
+    background: var(--danger-faint);
+    border-bottom-color: var(--danger-line);
+  }
+
+  .danger-eyebrow {
+    color: var(--danger);
+  }
+
+  .danger-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 16px;
+  }
+
+  .danger-button {
+    border-color: var(--danger-line);
+    background: var(--danger-faint);
+    color: var(--danger);
+  }
+
+  .danger-button:hover:not(:disabled) {
+    border-color: var(--danger);
+    background: rgba(248, 113, 113, 0.16);
+    color: var(--danger);
+  }
+
+  .secondary-button {
+    border-color: var(--line-strong);
+    background: transparent;
+    color: var(--text-soft);
+  }
+
+  .secondary-button:hover:not(:disabled) {
+    border-color: rgba(255, 255, 255, 0.18);
+    background: var(--bg-elevated);
+    color: var(--text);
+  }
+
+  /* ── Workspace content ──────────────────────────────── */
 
   .workspace-content-grid {
     display: grid;
@@ -1580,7 +1675,16 @@
   }
 
   .section-link {
+    color: var(--link);
     font-size: 11px;
+    font-weight: 600;
+    transition: color var(--speed) var(--ease);
+  }
+
+  .section-link:hover {
+    color: var(--link-hover);
+    text-decoration: underline;
+    text-underline-offset: 3px;
   }
 
   .resource-list,
@@ -1594,6 +1698,7 @@
   .token-row {
     min-width: 0;
     border-bottom: 1px solid var(--line-soft);
+    transition: background var(--speed) var(--ease);
   }
 
   .resource-row:last-child,
@@ -1609,12 +1714,24 @@
     justify-content: space-between;
     gap: 14px;
     padding: 10px 15px;
-    color: var(--link);
+    color: var(--text-muted);
   }
 
   .resource-row:hover,
   .token-row:hover {
-    background: var(--info-faint);
+    background: var(--bg-elevated);
+  }
+
+  .resource-row > svg {
+    color: var(--text-faint);
+    transition:
+      color var(--speed) var(--ease),
+      transform var(--speed) var(--ease);
+  }
+
+  .resource-row:hover > svg {
+    color: var(--brand);
+    transform: translateX(2px);
   }
 
   .resource-row > div {
@@ -1624,14 +1741,15 @@
   }
 
   .resource-row strong {
-    color: var(--link);
+    color: var(--text);
     font-size: 12px;
     font-weight: 600;
     overflow-wrap: anywhere;
+    transition: color var(--speed) var(--ease);
   }
 
   .resource-row:hover strong {
-    color: var(--link-hover);
+    color: var(--brand-bright);
   }
 
   .resource-row code {
@@ -1669,14 +1787,15 @@
   }
 
   .token-row strong {
-    color: var(--link);
+    color: var(--text);
     font-size: 11.5px;
     font-weight: 550;
     overflow-wrap: anywhere;
+    transition: color var(--speed) var(--ease);
   }
 
   .token-row:hover strong {
-    color: var(--link-hover);
+    color: var(--brand-bright);
   }
 
   .section-footnote {
@@ -1701,6 +1820,8 @@
   .empty-detail {
     padding: 14px;
   }
+
+  /* ── Responsive ─────────────────────────────────────── */
 
   @media (max-width: 1080px) {
     .workspace-summary {
@@ -1735,6 +1856,13 @@
 
     .workspace-options {
       max-height: 280px;
+    }
+  }
+
+  @media (max-width: 860px) {
+    .workspace-settings-grid,
+    .workspace-settings-form {
+      grid-template-columns: 1fr;
     }
   }
 
@@ -1794,9 +1922,12 @@
     }
 
     .workspace-actions {
-      align-items: flex-start;
+      align-items: stretch;
       flex-direction: column;
-      gap: 9px;
+    }
+
+    .workspace-actions a {
+      justify-content: space-between;
     }
   }
 </style>

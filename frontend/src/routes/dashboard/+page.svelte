@@ -428,9 +428,17 @@
     <p class="eyebrow">Overview</p>
     <h1>Dashboard</h1>
 
-    <p>
-      A clear view of your workspaces, projects and recent
-      activity.
+    <p class="dashboard-context">
+      {#if loading}
+        Loading your workspaces…
+      {:else if selectedWorkspace}
+        Signed in as
+        <strong>{roleLabel(currentRole)}</strong>
+        in
+        <strong>{selectedWorkspace.name}</strong>
+      {:else}
+        Create a workspace to get started.
+      {/if}
     </p>
   </div>
 
@@ -440,6 +448,11 @@
     type="button"
     onclick={toggleWorkspaceForm}
   >
+    {#if !showWorkspaceForm}
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 5v14M5 12h14" />
+      </svg>
+    {/if}
     {showWorkspaceForm ? 'Close' : 'New workspace'}
   </button>
 </header>
@@ -498,7 +511,7 @@
       </label>
 
       <div class="slug-preview">
-        <span>Identifier</span>
+        <span class="eyebrow">Identifier</span>
         <code>{effectiveSlug || 'workspace-slug'}</code>
       </div>
 
@@ -597,7 +610,7 @@
   aria-label="Dashboard summary"
 >
   <div class="overview-item">
-    <span>Workspaces</span>
+    <span class="eyebrow">Workspaces</span>
     <strong>{workspaces.length}</strong>
 
     <small>
@@ -606,7 +619,7 @@
   </div>
 
   <div class="overview-item">
-    <span>Current projects</span>
+    <span class="eyebrow">Projects</span>
     <strong>{currentWorkspaceProjects.length}</strong>
 
     <small>
@@ -615,14 +628,14 @@
   </div>
 
   <div class="overview-item">
-    <span>Invitations</span>
+    <span class="eyebrow">Invitations</span>
     <strong>{pendingInvites.length}</strong>
 
     <small>Pending response</small>
   </div>
 
   <div class="overview-item">
-    <span>Unread activity</span>
+    <span class="eyebrow">Unread</span>
     <strong>{unreadNotifications}</strong>
 
     <small>Notifications</small>
@@ -633,17 +646,9 @@
   class="dashboard-section current-workspace-section"
   aria-labelledby="current-workspace-title"
 >
-  <div class="section-heading section-heading--bordered">
-    <div>
-      <h2 id="current-workspace-title">
-        Current workspace
-      </h2>
-
-      <p>
-        The workspace currently used by the navigation.
-      </p>
-    </div>
-  </div>
+  <h2 class="visually-hidden" id="current-workspace-title">
+    Current workspace
+  </h2>
 
   {#if loading}
     <p class="loading-state">Loading workspace…</p>
@@ -657,24 +662,33 @@
   {:else}
     <div class="current-workspace">
       <div class="workspace-identity">
-        <WorkspaceAvatar workspace={selectedWorkspace} />
+        <span class="eyebrow">Current workspace</span>
 
-        <div>
-          <div class="workspace-name-line">
-            <strong>{selectedWorkspace.name}</strong>
+        <div class="workspace-identity__row">
+          <WorkspaceAvatar workspace={selectedWorkspace} />
 
-            <span class="neutral-badge">
-              {workspaceStatus(selectedWorkspace)}
-            </span>
+          <div>
+            <div class="workspace-name-line">
+              <strong>{selectedWorkspace.name}</strong>
+
+              <span
+                class:status-active={
+                  selectedWorkspace.active !== false
+                }
+                class="badge"
+              >
+                {workspaceStatus(selectedWorkspace)}
+              </span>
+            </div>
+
+            <code>{selectedWorkspace.slug}</code>
           </div>
-
-          <code>{selectedWorkspace.slug}</code>
         </div>
       </div>
 
       <dl class="workspace-details">
         <div>
-          <dt>Your role</dt>
+          <dt class="eyebrow">Your role</dt>
           <dd>
             {roleLabel(
               selectedWorkspace.current_user_role
@@ -683,14 +697,14 @@
         </div>
 
         <div>
-          <dt>Access</dt>
+          <dt class="eyebrow">Access</dt>
           <dd>
             {accessLabel(selectedWorkspace.access_scope)}
           </dd>
         </div>
 
         <div>
-          <dt>Projects</dt>
+          <dt class="eyebrow">Projects</dt>
           <dd>{currentWorkspaceProjects.length}</dd>
         </div>
       </dl>
@@ -869,7 +883,12 @@
 
           <div class="workspace-row__meta">
             <span>{roleLabel(workspace.current_user_role)}</span>
-            <span>{workspaceStatus(workspace)}</span>
+
+            <span
+              class:meta-active={workspace.active !== false}
+            >
+              {workspaceStatus(workspace)}
+            </span>
           </div>
 
           <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -882,36 +901,45 @@
 </section>
 
 <style>
+  /* ── Header ─────────────────────────────────────────── */
+
   .dashboard-header {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
     gap: 20px;
-    margin-bottom: 20px;
+    margin-bottom: 22px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--line);
   }
 
   .dashboard-heading {
     display: grid;
-    gap: 5px;
+    gap: 6px;
   }
 
-  .dashboard-heading > p:last-child {
-    max-width: 680px;
+  .dashboard-context {
     color: var(--text-muted);
     font-size: 13px;
     line-height: 1.6;
   }
 
-  .workspace-button {
-    flex: 0 0 auto;
-    border-color: var(--brand);
-    background: var(--brand);
-    color: var(--brand-ink);
+  .dashboard-context strong {
+    color: var(--text-soft);
+    font-weight: 550;
   }
 
-  .workspace-button:hover:not(:disabled) {
-    border-color: var(--brand-soft);
-    background: var(--brand-soft);
+  .workspace-button {
+    flex: 0 0 auto;
+  }
+
+  .workspace-button svg {
+    width: 14px;
+    height: 14px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
   }
 
   .workspace-button.secondary-button {
@@ -925,6 +953,17 @@
     color: var(--text);
   }
 
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  /* ── Sections (shared shell) ────────────────────────── */
+
   .dashboard-section,
   .workspace-form-section {
     margin-bottom: 16px;
@@ -932,13 +971,6 @@
     border-radius: var(--radius-md);
     background: var(--bg-panel);
     overflow: hidden;
-  }
-
-  .workspace-form-section {
-    display: grid;
-    gap: 17px;
-    border-color: var(--brand-line);
-    padding: 18px;
   }
 
   .section-heading {
@@ -949,8 +981,9 @@
   }
 
   .section-heading--bordered {
-    padding: 14px 16px;
+    padding: 13px 16px;
     border-bottom: 1px solid var(--line-soft);
+    background: var(--bg-panel-strong);
   }
 
   .section-heading > div {
@@ -973,13 +1006,14 @@
     min-width: 24px;
     height: 22px;
     place-items: center;
-    border: 1px solid var(--line-strong);
+    border: 1px solid var(--brand-line);
     border-radius: 999px;
-    background: var(--bg-elevated);
-    color: var(--text-muted);
+    background: var(--brand-faint);
+    color: var(--brand-soft);
     padding: 0 7px;
     font-family: var(--font-mono);
     font-size: 10.5px;
+    font-weight: 600;
   }
 
   .section-link {
@@ -996,7 +1030,16 @@
     text-underline-offset: 3px;
   }
 
-  /* Workspace creation */
+  /* ── Workspace creation ─────────────────────────────── */
+
+  .workspace-form-section {
+    display: grid;
+    gap: 17px;
+    border-color: var(--brand-line);
+    padding: 18px;
+    background: var(--bg-panel);
+    box-shadow: inset 3px 0 0 var(--brand);
+  }
 
   .workspace-form {
     display: grid;
@@ -1008,15 +1051,18 @@
     grid-column: 1 / -1;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     min-width: 0;
-    color: var(--text-muted);
-    font-size: 11.5px;
   }
 
   .slug-preview code {
     min-width: 0;
-    color: var(--text-soft);
+    padding: 3px 8px;
+    border: 1px solid var(--line-ink);
+    border-radius: 4px;
+    background: var(--bg-ink);
+    color: var(--brand-bright);
+    font-size: 11.5px;
     overflow-wrap: anywhere;
   }
 
@@ -1047,10 +1093,11 @@
     font-size: 12px;
   }
 
-  /* Invitations */
+  /* ── Invitations — the one urgent block ─────────────── */
 
   .invitations-section {
     border-color: var(--brand-line);
+    box-shadow: inset 3px 0 0 var(--brand);
   }
 
   .invitation-list {
@@ -1095,7 +1142,7 @@
     gap: 7px;
   }
 
-  /* Overview */
+  /* ── Overview strip — the metrics rail ──────────────── */
 
   .overview-strip {
     display: grid;
@@ -1108,27 +1155,47 @@
   }
 
   .overview-item {
+    position: relative;
     display: grid;
     min-width: 0;
-    gap: 3px;
-    padding: 14px 16px;
+    gap: 4px;
+    padding: 15px 16px 13px;
     border-right: 1px solid var(--line-soft);
+    transition: background var(--speed) var(--ease);
+  }
+
+  .overview-item::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--brand);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform var(--speed) var(--ease);
+  }
+
+  .overview-item:hover {
+    background: var(--bg-panel-strong);
+  }
+
+  .overview-item:hover::before {
+    transform: scaleX(1);
   }
 
   .overview-item:last-child {
     border-right: 0;
   }
 
-  .overview-item > span {
-    color: var(--text-muted);
-    font-size: 11px;
-  }
-
   .overview-item > strong {
     color: var(--text);
     font-family: var(--font-mono);
-    font-size: 19px;
+    font-size: 22px;
     font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
   }
 
   .overview-item > small {
@@ -1140,27 +1207,37 @@
     white-space: nowrap;
   }
 
-  /* Current workspace */
+  /* ── Current workspace — command panel ──────────────── */
+
+  .current-workspace-section {
+    border-color: var(--line-strong);
+  }
 
   .current-workspace {
     display: grid;
     grid-template-columns:
-      minmax(220px, 1.15fr)
-      minmax(260px, 1fr)
-      minmax(190px, 0.8fr);
-    gap: 22px;
-    align-items: center;
-    padding: 16px;
+      minmax(240px, 1.1fr)
+      minmax(0, 1.4fr);
+    align-items: stretch;
   }
 
   .workspace-identity {
+    display: grid;
+    align-content: center;
+    gap: 12px;
+    padding: 18px 20px;
+    border-right: 1px solid var(--line-soft);
+    background: var(--bg-ink-soft);
+  }
+
+  .workspace-identity__row {
     display: flex;
     min-width: 0;
     align-items: center;
-    gap: 11px;
+    gap: 12px;
   }
 
-  .workspace-identity > div:last-child {
+  .workspace-identity__row > div:last-child {
     display: grid;
     min-width: 0;
     gap: 4px;
@@ -1170,115 +1247,99 @@
     display: flex;
     min-width: 0;
     align-items: center;
-    gap: 8px;
+    gap: 9px;
     flex-wrap: wrap;
   }
 
   .workspace-name-line strong {
     color: var(--text);
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 600;
+    letter-spacing: -0.01em;
     overflow-wrap: anywhere;
   }
 
   .workspace-identity code {
+    width: fit-content;
+    padding: 2px 7px;
+    border: 1px solid var(--line-ink);
+    border-radius: 4px;
+    background: var(--bg-ink);
     color: var(--text-muted);
     font-size: 10.5px;
     overflow-wrap: anywhere;
-  }
-
-  .neutral-badge {
-    display: inline-flex;
-    min-height: 20px;
-    align-items: center;
-    border: 1px solid var(--line-strong);
-    border-radius: 999px;
-    background: var(--bg-elevated);
-    color: var(--text-muted);
-    padding: 0 7px;
-    font-size: 10px;
   }
 
   .workspace-details {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px;
+    gap: 14px;
+    align-content: center;
     margin: 0;
+    padding: 18px 20px;
   }
 
   .workspace-details div {
     display: grid;
     min-width: 0;
-    gap: 3px;
-  }
-
-  .workspace-details dt {
-    color: var(--text-muted);
-    font-size: 10.5px;
+    gap: 5px;
   }
 
   .workspace-details dd {
     margin: 0;
-    color: var(--text-soft);
-    font-size: 11.5px;
+    color: var(--text);
+    font-size: 12.5px;
     font-weight: 550;
     overflow-wrap: anywhere;
   }
 
   .workspace-links {
-    display: grid;
-    gap: 1px;
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    padding: 12px 20px;
+    border-top: 1px solid var(--line-soft);
+    background: var(--bg-panel-strong);
   }
 
   .workspace-links a {
-    display: flex;
-    min-height: 32px;
+    display: inline-flex;
+    min-height: 28px;
     align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    border-radius: var(--radius-sm);
-    color: var(--link);
-    padding: 5px 8px;
+    gap: 6px;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    background: var(--bg-elevated);
+    color: var(--text-soft);
+    padding: 0 11px;
     font-size: 11.5px;
     font-weight: 550;
     transition:
+      border-color var(--speed) var(--ease),
       background var(--speed) var(--ease),
       color var(--speed) var(--ease);
   }
 
   .workspace-links a:hover {
-    background: var(--info-faint);
-    color: var(--link-hover);
+    border-color: var(--brand-line);
+    background: var(--brand-faint);
+    color: var(--brand-bright);
   }
 
-  .workspace-links svg,
-  .resource-row > svg,
-  .workspace-row > svg {
-    width: 15px;
-    height: 15px;
+  .workspace-links svg {
+    width: 13px;
+    height: 13px;
     flex: 0 0 auto;
     fill: none;
     stroke: currentColor;
-    stroke-width: 1.7;
+    stroke-width: 1.8;
     stroke-linecap: round;
     stroke-linejoin: round;
-    color: var(--link);
+    opacity: 0.7;
   }
 
-  .resource-row strong,
-  .activity-row strong,
-  .workspace-row__identity strong {
-    color: var(--link);
-    transition: color var(--speed) var(--ease);
-  }
-
-  .resource-row:hover strong,
-  .activity-row:hover strong,
-  .workspace-row:hover .workspace-row__identity strong {
-    color: var(--link-hover);
-  }
-
-  /* Main dashboard grid */
+  /* ── Main grid ──────────────────────────────────────── */
 
   .dashboard-grid {
     display: grid;
@@ -1309,7 +1370,29 @@
   .resource-row:hover,
   .activity-row:hover,
   .workspace-row:hover {
-    background: var(--info-faint);
+    background: var(--bg-elevated);
+  }
+
+  .resource-row > svg,
+  .workspace-row > svg {
+    width: 15px;
+    height: 15px;
+    flex: 0 0 auto;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    color: var(--text-faint);
+    transition:
+      color var(--speed) var(--ease),
+      transform var(--speed) var(--ease);
+  }
+
+  .resource-row:hover > svg,
+  .workspace-row:hover > svg {
+    color: var(--brand);
+    transform: translateX(2px);
   }
 
   .resource-row {
@@ -1333,6 +1416,11 @@
     font-size: 12.5px;
     font-weight: 550;
     overflow-wrap: anywhere;
+    transition: color var(--speed) var(--ease);
+  }
+
+  .resource-row:hover strong {
+    color: var(--brand-bright);
   }
 
   .resource-row span {
@@ -1349,6 +1437,8 @@
     color: var(--text-muted);
     font-size: 10.5px;
   }
+
+  /* ── Activity ───────────────────────────────────────── */
 
   .activity-row {
     display: grid;
@@ -1371,6 +1461,7 @@
   .activity-indicator.unread {
     border-color: var(--brand);
     background: var(--brand);
+    box-shadow: 0 0 0 3px var(--brand-faint);
   }
 
   .activity-row > div {
@@ -1384,6 +1475,11 @@
     font-size: 11.5px;
     font-weight: 600;
     overflow-wrap: anywhere;
+    transition: color var(--speed) var(--ease);
+  }
+
+  .activity-row:hover strong {
+    color: var(--text);
   }
 
   .activity-row p {
@@ -1397,7 +1493,7 @@
     -webkit-box-orient: vertical;
   }
 
-  /* Workspace list */
+  /* ── Workspace list ─────────────────────────────────── */
 
   .workspace-row {
     display: grid;
@@ -1413,7 +1509,12 @@
   }
 
   .workspace-row.current {
+    background: var(--brand-faint);
     box-shadow: inset 2px 0 0 var(--brand);
+  }
+
+  .workspace-row.current:hover {
+    background: var(--brand-glow);
   }
 
   .workspace-row__identity {
@@ -1434,6 +1535,11 @@
     font-size: 12.5px;
     font-weight: 550;
     overflow-wrap: anywhere;
+    transition: color var(--speed) var(--ease);
+  }
+
+  .workspace-row:hover .workspace-row__identity strong {
+    color: var(--brand-bright);
   }
 
   .workspace-row__identity code {
@@ -1450,6 +1556,12 @@
     font-size: 11px;
   }
 
+  .workspace-row__meta .meta-active {
+    color: var(--green-soft);
+  }
+
+  /* ── States ─────────────────────────────────────────── */
+
   .loading-state {
     min-height: 76px;
     padding: 20px 16px;
@@ -1460,6 +1572,8 @@
   .empty-wrapper {
     padding: 14px;
   }
+
+  /* ── Responsive ─────────────────────────────────────── */
 
   @media (max-width: 980px) {
     .overview-strip {
@@ -1475,27 +1589,18 @@
     }
 
     .current-workspace {
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1fr;
     }
 
-    .workspace-links {
-      grid-column: 1 / -1;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+    .workspace-identity {
+      border-right: 0;
+      border-bottom: 1px solid var(--line-soft);
     }
   }
 
   @media (max-width: 780px) {
     .dashboard-grid {
       grid-template-columns: 1fr;
-    }
-
-    .current-workspace {
-      grid-template-columns: 1fr;
-    }
-
-    .workspace-links {
-      grid-column: auto;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .workspace-row {
@@ -1550,10 +1655,11 @@
 
     .workspace-details {
       grid-template-columns: 1fr;
+      gap: 12px;
     }
 
     .workspace-links {
-      grid-template-columns: 1fr;
+      padding: 12px 16px;
     }
 
     .workspace-row {
