@@ -3,11 +3,13 @@
   import EmptyState from '$lib/components/EmptyState.svelte';
   import InlineError from '$lib/components/InlineError.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
-  import StatusBadge from '$lib/components/StatusBadge.svelte';
   import { notifications } from '$lib/stores/notifications';
 
   let filter: 'all' | 'unread' | 'read' = 'all';
   let actionError = '';
+
+  $: items = $notifications.notifications;
+  $: unread = $notifications.unreadCount;
 
   async function load() {
     actionError = '';
@@ -18,8 +20,8 @@
     actionError = '';
     try {
       await notifications.markRead(id);
-    } catch (error) {
-      actionError = error instanceof Error ? error.message : 'Unable to mark notification as read.';
+    } catch (err) {
+      actionError = err instanceof Error ? err.message : 'Unable to mark as read.';
     }
   }
 
@@ -27,13 +29,19 @@
     actionError = '';
     try {
       await notifications.markAllRead();
-    } catch (error) {
-      actionError = error instanceof Error ? error.message : 'Unable to mark notifications as read.';
+    } catch (err) {
+      actionError = err instanceof Error ? err.message : 'Unable to mark all as read.';
     }
   }
 
   function dateLabel(value: number) {
-    return value ? new Date(value * 1000).toLocaleString() : '';
+    if (!value) return '';
+    return new Date(value * 1000).toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   }
 
   onMount(load);
@@ -41,43 +49,219 @@
 
 <svelte:head><title>Notifications | Softadastra Cloud</title></svelte:head>
 
-<PageHeader eyebrow="Notifications" title="What changed recently" />
+<PageHeader eyebrow="Activity" title="Notifications">
+  {#if unread > 0}
+    <button class="ghost" type="button" on:click={markAllRead}>
+      Mark all read
+    </button>
+  {/if}
+</PageHeader>
+
+<InlineError message={$notifications.error || actionError} />
 
 <section class="panel">
   <div class="panel-header">
     <h2>Notification center</h2>
-    <span>{$notifications.unreadCount} unread</span>
+    <span>{unread} unread</span>
   </div>
 
-  <div class="actions horizontal">
-    <select bind:value={filter} on:change={load}>
-      <option value="all">All</option>
-      <option value="unread">Unread</option>
-      <option value="read">Read</option>
-    </select>
-    <button class="small" type="button" on:click={markAllRead} disabled={$notifications.unreadCount === 0}>Mark all as read</button>
+  <!-- Filter tabs -->
+  <div class="filter-tabs" role="tablist" aria-label="Filter notifications">
+    {#each (['all', 'unread', 'read'] as const) as tab}
+      <button
+        class="filter-tab"
+        class:active={filter === tab}
+        type="button"
+        role="tab"
+        aria-selected={filter === tab}
+        on:click={() => { filter = tab; load(); }}
+      >
+        {tab.charAt(0).toUpperCase() + tab.slice(1)}
+      </button>
+    {/each}
   </div>
-
-  {#if $notifications.error || actionError}
-    <InlineError message={$notifications.error || actionError} />
-  {/if}
 
   {#if $notifications.loading}
-    <p class="muted">Loading notifications...</p>
-  {:else if $notifications.notifications.length === 0}
-    <EmptyState title="No notifications yet." body="Important updates about your workspace will appear here." />
+    <p class="muted">Loading…</p>
+  {:else if items.length === 0}
+    <EmptyState
+      title={filter === 'unread' ? 'No unread notifications' : 'No notifications yet'}
+      body="Workspace events and important account updates appear here."
+    />
   {:else}
-    <div class="table-list">
-      {#each $notifications.notifications as item}
-        <button class:unread={!item.read_at} class="row notification-row" type="button" on:click={() => !item.read_at && markRead(item.id)}>
-          <span>
+    <div class="table-list notif-list">
+      {#each items as item (item.id)}
+        <button
+          class="row notif-row"
+          class:notif-unread={!item.read_at}
+          type="button"
+          aria-label="{item.read_at ? '' : 'Unread: '}{item.title}"
+          on:click={() => !item.read_at && markRead(item.id)}
+        >
+          <span class="notif-dot-col" aria-hidden="true">
+            {#if !item.read_at}
+              <span class="notif-dot"></span>
+            {/if}
+          </span>
+
+          <span class="notif-body">
             <strong>{item.title}</strong>
             <small>{item.message}</small>
-            <small>{dateLabel(item.created_at)}</small>
           </span>
-          <span class="actions"><StatusBadge status={item.read_at ? 'read' : 'unread'} /><small>{item.type}</small></span>
+
+          <span class="notif-meta">
+            <small class="notif-type">{item.type}</small>
+            {#if item.created_at}
+              <small class="notif-date">{dateLabel(item.created_at)}</small>
+            {/if}
+          </span>
         </button>
       {/each}
     </div>
   {/if}
 </section>
+
+<style>
+  /* Filter tabs */
+  .filter-tabs {
+    display: flex;
+    gap: 2px;
+    padding: 3px;
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius-sm);
+    background: var(--bg-ink-soft);
+    width: fit-content;
+  }
+
+  .filter-tab {
+    min-height: 28px;
+    padding: 3px 14px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 12.5px;
+    font-weight: 500;
+    transition:
+      background var(--speed) var(--ease),
+      color var(--speed) var(--ease);
+  }
+
+  .filter-tab:hover {
+    background: var(--bg-elevated);
+    color: var(--text);
+  }
+
+  .filter-tab.active {
+    background: var(--bg-elevated);
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  /* Notification list */
+  .notif-list {
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+  }
+
+  .notif-row {
+    display: flex;
+    align-items: flex-start;
+    width: 100%;
+    min-height: 60px;
+    padding: 12px 14px;
+    gap: 12px;
+    border: 0;
+    border-bottom: 1px solid var(--line-soft);
+    border-radius: 0;
+    background: transparent;
+    color: var(--text);
+    text-align: left;
+    cursor: default;
+    font-size: 13.5px;
+    transition: background var(--speed) var(--ease);
+  }
+
+  .notif-row:last-child {
+    border-bottom: 0;
+  }
+
+  .notif-row:hover {
+    background: var(--bg-elevated);
+  }
+
+  .notif-unread {
+    cursor: pointer;
+    background: rgba(249, 115, 22, 0.03);
+  }
+
+  .notif-unread:hover {
+    background: var(--brand-faint);
+  }
+
+  /* Unread indicator */
+  .notif-dot-col {
+    width: 10px;
+    flex: 0 0 10px;
+    display: flex;
+    align-items: center;
+    padding-top: 5px;
+  }
+
+  .notif-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--brand);
+    flex: 0 0 auto;
+  }
+
+  .notif-body {
+    display: grid;
+    gap: 3px;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .notif-body strong {
+    font-weight: 550;
+    color: var(--text);
+  }
+
+  .notif-body small {
+    color: var(--text-muted);
+    font-size: 12.5px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .notif-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+    flex: 0 0 auto;
+    padding-top: 2px;
+  }
+
+  .notif-type {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--text-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .notif-date {
+    font-size: 11.5px;
+    color: var(--text-faint);
+    white-space: nowrap;
+  }
+
+  @media (max-width: 600px) {
+    .notif-meta {
+      display: none;
+    }
+  }
+</style>

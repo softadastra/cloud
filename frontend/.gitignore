@@ -5,3 +5,4 @@ vite.config.*.timestamp-*
 vite.config.js.timestamp-*
 .env
 .env.*
+cmd.md
