@@ -2,6 +2,7 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import {
+    deleteBuildReport,
     listBuildReports,
     submitBuildReport
   } from '$lib/api/buildReports';
@@ -34,6 +35,7 @@
   let initialized = false;
   let projectListRequestId = 0;
   let saving = false;
+  let busyReportId = '';
 
   let error = '';
   let success = '';
@@ -291,6 +293,33 @@
   function handleSubmit(event: SubmitEvent) {
     event.preventDefault();
     void submitReport();
+  }
+
+  async function deleteReportRecord(report: BuildReport) {
+    if (!selectedWorkspaceId || !selectedProjectId || !canSubmit) {
+      return;
+    }
+
+    if (!window.confirm('Hide this build report? The historical record is kept for safety.')) {
+      return;
+    }
+
+    busyReportId = report.id;
+    error = '';
+    success = '';
+
+    try {
+      await deleteBuildReport(selectedWorkspaceId, selectedProjectId, report.id);
+      reports = reports.filter((item) => item.id !== report.id);
+      success = 'Build report hidden.';
+    } catch (err) {
+      error =
+        err instanceof ApiError
+          ? err.message
+          : 'Unable to hide build report.';
+    } finally {
+      busyReportId = '';
+    }
   }
 
   function toggleDiagnostics(reportId: string) {
@@ -1158,6 +1187,17 @@
                       {#if report.toolchain}
                         <small>{report.toolchain}</small>
                       {/if}
+
+                      {#if canSubmit}
+                        <button
+                          class="danger-link"
+                          type="button"
+                          disabled={busyReportId === report.id}
+                          onclick={() => deleteReportRecord(report)}
+                        >
+                          Delete
+                        </button>
+                      {/if}
                     </div>
 
                     <div
@@ -1902,6 +1942,8 @@
     min-width: 150px;
     justify-content: flex-end;
   }
+
+  .danger-link { min-height: 32px; border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--line)); border-radius: var(--radius-sm); background: transparent; padding: 0 10px; color: var(--danger); font-size: 11px; font-weight: 700; }
 
   .diagnostics-button {
     min-height: 30px;

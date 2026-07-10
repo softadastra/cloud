@@ -2,8 +2,12 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import {
+    deletePackageVersion,
+    deprecatePackageVersion,
     listPackageVersions,
-    publishPackageVersion
+    publishPackageVersion,
+    unyankPackageVersion,
+    yankPackageVersion
   } from '$lib/api/packageVersions';
   import { listPackages } from '$lib/api/packages';
   import { listWorkspaces } from '$lib/api/workspaces';
@@ -34,6 +38,7 @@
   let initialized = false;
   let packageListRequestId = 0;
   let saving = false;
+  let busyVersionId = '';
 
   let error = '';
   let success = '';
@@ -143,6 +148,16 @@
     return value === 'public'
       ? 'Public'
       : 'Private';
+  }
+
+  function versionIsYanked(item: PackageVersion) {
+    return item.status === 'yanked';
+  }
+
+  function syncVersion(updated: PackageVersion) {
+    versions = versions.map((item) =>
+      item.id === updated.id ? updated : item
+    );
   }
 
   function statusLabel(value?: string) {
@@ -455,6 +470,67 @@
       if (requestId === versionRequestId) {
         loadingVersions = false;
       }
+    }
+  }
+
+  async function handleVersionAction(item: PackageVersion, action: 'yank' | 'unyank' | 'deprecate' | 'delete') {
+    if (!selectedWorkspaceId || !selectedPackageId || !canPublish) {
+      return;
+    }
+
+    const message =
+      action === 'delete'
+        ? `Delete version ${item.version}? The archive is kept for safety.`
+        : action === 'deprecate'
+          ? `Deprecate version ${item.version}?`
+          : action === 'yank'
+            ? `Yank version ${item.version}? It will be hidden from normal resolution.`
+            : `Unyank version ${item.version}?`;
+
+    if (!window.confirm(message)) {
+      return;
+    }
+
+    const deprecationMessage =
+      action === 'deprecate'
+        ? window.prompt('Deprecation message', item.deprecation_message || 'Use a newer version.') ?? ''
+        : '';
+
+    busyVersionId = item.id;
+    error = '';
+    success = '';
+
+    try {
+      const updated =
+        action === 'delete'
+          ? await deletePackageVersion(selectedWorkspaceId, selectedPackageId, item.id)
+          : action === 'deprecate'
+            ? await deprecatePackageVersion(selectedWorkspaceId, selectedPackageId, item.id, deprecationMessage)
+            : action === 'yank'
+              ? await yankPackageVersion(selectedWorkspaceId, selectedPackageId, item.id)
+              : await unyankPackageVersion(selectedWorkspaceId, selectedPackageId, item.id);
+
+      if (action === 'delete') {
+        versions = versions.filter((version) => version.id !== item.id);
+      } else {
+        syncVersion(updated.package_version);
+      }
+
+      success =
+        action === 'delete'
+          ? 'Package version deleted.'
+          : action === 'deprecate'
+            ? 'Package version deprecated.'
+            : action === 'yank'
+              ? 'Package version yanked.'
+              : 'Package version restored.';
+    } catch (err) {
+      error =
+        err instanceof ApiError
+          ? err.message
+          : 'Unable to update package version.';
+    } finally {
+      busyVersionId = '';
     }
   }
 
@@ -960,7 +1036,7 @@
               <span>Checksum</span>
               <span>Size</span>
               <span>Status</span>
-              <span class="align-right">Archive</span>
+              <span class="align-right">Actions</span>
             </div>
 
             {#each visibleVersions as item (item.id)}
@@ -1046,26 +1122,34 @@
                   data-label="Archive"
                 >
                   {#if item.archive_url}
-                    <a
-                      href={item.archive_url}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Download
-
-                      <svg
-                        viewBox="0 0 24 24"
-                        aria-hidden="true"
+                    <div class="version-actions">
+                      <a
+                        href={item.archive_url}
+                        target="_blank"
+                        rel="noreferrer"
                       >
-                        <path d="M12 3v12"></path>
-                        <path d="m7 10 5 5 5-5"></path>
-                        <path d="M5 21h14"></path>
-                      </svg>
-                    </a>
+                        Download
+                      </a>
+
+                      {#if canPublish}
+                        <button type="button" disabled={busyVersionId === item.id} onclick={() => handleVersionAction(item, versionIsYanked(item) ? 'unyank' : 'yank')}>
+                          {versionIsYanked(item) ? 'Unyank' : 'Yank'}
+                        </button>
+                        <button type="button" disabled={busyVersionId === item.id} onclick={() => handleVersionAction(item, 'deprecate')}>Deprecate</button>
+                        <button class="danger-link" type="button" disabled={busyVersionId === item.id} onclick={() => handleVersionAction(item, 'delete')}>Delete</button>
+                      {/if}
+                    </div>
                   {:else}
-                    <span class="unavailable">
-                      Unavailable
-                    </span>
+                    <div class="version-actions">
+                      <span class="unavailable">Unavailable</span>
+                      {#if canPublish}
+                        <button type="button" disabled={busyVersionId === item.id} onclick={() => handleVersionAction(item, versionIsYanked(item) ? 'unyank' : 'yank')}>
+                          {versionIsYanked(item) ? 'Unyank' : 'Yank'}
+                        </button>
+                        <button type="button" disabled={busyVersionId === item.id} onclick={() => handleVersionAction(item, 'deprecate')}>Deprecate</button>
+                        <button class="danger-link" type="button" disabled={busyVersionId === item.id} onclick={() => handleVersionAction(item, 'delete')}>Delete</button>
+                      {/if}
+                    </div>
                   {/if}
                 </div>
               </div>
@@ -1091,6 +1175,10 @@
     background: var(--brand);
     color: var(--brand-ink);
   }
+
+  .version-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+  .version-actions button { min-height: 28px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg-elevated); padding: 0 8px; color: var(--text-strong); font-size: 10.5px; font-weight: 700; cursor: pointer; }
+  .version-actions .danger-link { border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); color: var(--danger); }
 
   .publish-version-button:hover:not(:disabled) {
     border-color: var(--brand-soft);
@@ -1503,8 +1591,7 @@
     font-size: 11.5px;
   }
 
-  .package-link svg,
-  .archive-cell svg {
+  .package-link svg {
     width: 15px;
     height: 15px;
     fill: none;

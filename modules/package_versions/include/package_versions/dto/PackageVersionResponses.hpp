@@ -34,6 +34,10 @@ namespace cloud::package_versions::dto
     std::string manifest_json;
     std::string status;
     std::int64_t size_bytes{0};
+    std::int64_t yanked_at{0};
+    std::int64_t deprecated_at{0};
+    std::string deprecation_message;
+    std::int64_t deleted_at{0};
     std::int64_t created_at{0};
     std::int64_t updated_at{0};
 
@@ -50,6 +54,10 @@ namespace cloud::package_versions::dto
           "manifest_json", manifest_json,
           "status", status,
           "size_bytes", size_bytes,
+          "yanked_at", yanked_at,
+          "deprecated_at", deprecated_at,
+          "deprecation_message", deprecation_message,
+          "deleted_at", deleted_at,
           "created_at", created_at,
           "updated_at", updated_at);
     }

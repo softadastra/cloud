@@ -39,6 +39,8 @@ namespace cloud::build_reports::dto
     std::int64_t duration_ms{0};
     std::int64_t warnings_count{0};
     std::int64_t errors_count{0};
+    std::string record_status{"active"};
+    std::int64_t deleted_at{0};
     std::int64_t created_at{0};
 
     vix::json::Json to_json() const
@@ -59,6 +61,8 @@ namespace cloud::build_reports::dto
           "duration_ms", duration_ms,
           "warnings_count", warnings_count,
           "errors_count", errors_count,
+          "record_status", record_status,
+          "deleted_at", deleted_at,
           "created_at", created_at);
     }
   };

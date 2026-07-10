@@ -93,6 +93,11 @@ namespace cloud::package_versions::services
     PackageVersionResult<dto::PackageVersionResponse> find_package_version_by_number(
         const dto::PackageVersionByNumberRequest &request) const;
 
+    PackageVersionResult<dto::PackageVersionResponse> set_status(
+        const dto::PackageVersionLookupRequest &request,
+        const std::string &status,
+        const std::string &deprecation_message = "");
+
     PackageVersionResult<std::vector<dto::PackageVersionResponse>> list_package_versions(
         const dto::ListPackageVersionsRequest &request) const;
 

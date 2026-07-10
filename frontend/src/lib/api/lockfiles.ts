@@ -25,3 +25,12 @@ export function uploadLockfile(input: {
     source: input.source ?? 'dashboard'
   });
 }
+
+
+export function deleteLockfile(workspaceId: string, projectId: string, lockfileId: string) {
+  return api.post<{ lockfile: Lockfile }>('/api/lockfiles/delete', { workspace_id: workspaceId, project_id: projectId, lockfile_id: lockfileId });
+}
+
+export function restoreLockfile(workspaceId: string, projectId: string, lockfileId: string) {
+  return api.post<{ lockfile: Lockfile }>('/api/lockfiles/restore', { workspace_id: workspaceId, project_id: projectId, lockfile_id: lockfileId });
+}

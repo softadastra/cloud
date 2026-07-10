@@ -2,6 +2,7 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import {
+    deleteLockfile,
     listLockfiles,
     uploadLockfile
   } from '$lib/api/lockfiles';
@@ -33,6 +34,7 @@
   let initialized = false;
   let projectListRequestId = 0;
   let saving = false;
+  let busyLockfileId = '';
 
   let error = '';
   let success = '';
@@ -217,6 +219,33 @@
   function handleUploadSubmit(event: SubmitEvent) {
     event.preventDefault();
     void submitLockfile();
+  }
+
+  async function deleteLockfileRecord(lockfile: Lockfile) {
+    if (!selectedWorkspaceId || !selectedProjectId || !canUpload) {
+      return;
+    }
+
+    if (!window.confirm('Hide this lockfile record? The content and checksum are kept for history.')) {
+      return;
+    }
+
+    busyLockfileId = lockfile.id;
+    error = '';
+    success = '';
+
+    try {
+      await deleteLockfile(selectedWorkspaceId, selectedProjectId, lockfile.id);
+      lockfiles = lockfiles.filter((item) => item.id !== lockfile.id);
+      success = 'Lockfile hidden.';
+    } catch (err) {
+      error =
+        err instanceof ApiError
+          ? err.message
+          : 'Unable to hide lockfile.';
+    } finally {
+      busyLockfileId = '';
+    }
   }
 
   function toggleJson(lockfileId: string) {
@@ -1009,6 +1038,17 @@
                         ? 'Copied'
                         : 'Copy'}
                     </button>
+
+                    {#if canUpload}
+                      <button
+                        class="danger-link"
+                        type="button"
+                        disabled={busyLockfileId === lockfile.id}
+                        onclick={() => deleteLockfileRecord(lockfile)}
+                      >
+                        Delete
+                      </button>
+                    {/if}
                   </div>
 
                   <div
@@ -1674,6 +1714,8 @@
     font-size: 10.5px;
     white-space: nowrap;
   }
+
+  .danger-link { min-height: 32px; border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--line)); border-radius: var(--radius-sm); background: transparent; padding: 0 10px; color: var(--danger); font-size: 11px; font-weight: 700; }
 
   .json-button {
     min-height: 30px;

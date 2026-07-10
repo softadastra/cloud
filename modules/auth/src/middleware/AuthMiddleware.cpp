@@ -584,7 +584,10 @@ namespace cloud::auth::middleware
          starts_with(req.path(), "/api/admin") ||
          starts_with(req.path(), "/api/supporters/me") ||
          starts_with(req.path(), "/api/feedback/create") ||
-         starts_with(req.path(), "/api/feedback/list_mine")) &&
+         starts_with(req.path(), "/api/feedback/list_mine") ||
+         starts_with(req.path(), "/api/feedback/update") ||
+         starts_with(req.path(), "/api/feedback/close") ||
+         starts_with(req.path(), "/api/feedback/delete")) &&
         workspace_id.empty())
     {
       ctx.role = "member";

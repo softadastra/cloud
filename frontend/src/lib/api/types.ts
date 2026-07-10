@@ -102,6 +102,7 @@ export type AdminSupporterSummary = {
   expires_at: number;
   created_at: number;
   updated_at: number;
+  deleted_at?: number;
 };
 
 export type AdminSupporterInput = Partial<AdminSupporterSummary> & {
@@ -355,6 +356,10 @@ export type PackageVersion = {
   manifest_json: string;
   size_bytes: number;
   status: string;
+  yanked_at?: number;
+  deprecated_at?: number;
+  deprecation_message?: string;
+  deleted_at?: number;
   access_scope?: "entire_workspace" | "selected_projects" | string;
   project_ids_json?: string;
   created_at: number;
@@ -369,6 +374,8 @@ export type Lockfile = {
   checksum_sha256: string;
   lockfile_json: string;
   source: string;
+  status?: string;
+  deleted_at?: number;
   created_at: number;
 };
 
@@ -388,6 +395,8 @@ export type BuildReport = {
   duration_ms: number;
   warnings_count: number;
   errors_count: number;
+  record_status?: string;
+  deleted_at?: number;
   created_at: number;
 };
 
@@ -457,4 +466,5 @@ export type FeedbackItem = {
   status: string;
   created_at: number;
   updated_at: number;
+  deleted_at?: number;
 };

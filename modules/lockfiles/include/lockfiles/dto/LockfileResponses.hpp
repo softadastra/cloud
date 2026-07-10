@@ -31,6 +31,8 @@ namespace cloud::lockfiles::dto
     std::string lockfile_json;
     std::string checksum_sha256;
     std::string source;
+    std::string status{"active"};
+    std::int64_t deleted_at{0};
     std::int64_t created_at{0};
 
     vix::json::Json to_json() const
@@ -43,6 +45,8 @@ namespace cloud::lockfiles::dto
           "lockfile_json", lockfile_json,
           "checksum_sha256", checksum_sha256,
           "source", source,
+          "status", status,
+          "deleted_at", deleted_at,
           "created_at", created_at);
     }
   };

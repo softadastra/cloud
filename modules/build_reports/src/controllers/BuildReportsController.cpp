@@ -220,5 +220,45 @@ namespace cloud::build_reports::controllers
           res,
           vix::json::o(
               "build_report", report.value().to_json())); });
+
+
+    app.post("/api/build_reports/delete", [](vix::Request &req, vix::Response &res)
+             {
+      const auto &body = req.json();
+
+      if (!require_json_object(body, res))
+      {
+        return;
+      }
+
+      auto updated = build_report_service().set_record_status(read_build_report_lookup_request(body), "deleted");
+
+      if (updated.failed())
+      {
+        support::write_build_report_error(res, updated.error());
+        return;
+      }
+
+      json_ok(res, vix::json::o("build_report", updated.value().to_json())); });
+
+    app.post("/api/build_reports/restore", [](vix::Request &req, vix::Response &res)
+             {
+      const auto &body = req.json();
+
+      if (!require_json_object(body, res))
+      {
+        return;
+      }
+
+      auto updated = build_report_service().set_record_status(read_build_report_lookup_request(body), "active");
+
+      if (updated.failed())
+      {
+        support::write_build_report_error(res, updated.error());
+        return;
+      }
+
+      json_ok(res, vix::json::o("build_report", updated.value().to_json())); });
+
   }
 } // namespace cloud::build_reports::controllers

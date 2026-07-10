@@ -505,6 +505,87 @@ namespace cloud::package_versions::controllers
           vix::json::o(
               "package_version", version.value().to_json())); });
 
+
+
+    app.post("/api/package_versions/yank", [](vix::Request &req, vix::Response &res)
+             {
+      const auto &body = req.json();
+
+      if (!require_json_object(body, res))
+      {
+        return;
+      }
+
+      auto updated = package_version_service().set_status(read_package_version_lookup_request(body), "yanked");
+
+      if (updated.failed())
+      {
+        support::write_package_version_error(res, updated.error());
+        return;
+      }
+
+      json_ok(res, vix::json::o("package_version", updated.value().to_json())); });
+
+    app.post("/api/package_versions/unyank", [](vix::Request &req, vix::Response &res)
+             {
+      const auto &body = req.json();
+
+      if (!require_json_object(body, res))
+      {
+        return;
+      }
+
+      auto updated = package_version_service().set_status(read_package_version_lookup_request(body), "published");
+
+      if (updated.failed())
+      {
+        support::write_package_version_error(res, updated.error());
+        return;
+      }
+
+      json_ok(res, vix::json::o("package_version", updated.value().to_json())); });
+
+    app.post("/api/package_versions/deprecate", [](vix::Request &req, vix::Response &res)
+             {
+      const auto &body = req.json();
+
+      if (!require_json_object(body, res))
+      {
+        return;
+      }
+
+      auto updated = package_version_service().set_status(
+          read_package_version_lookup_request(body),
+          "deprecated",
+          body.value("deprecation_message", ""));
+
+      if (updated.failed())
+      {
+        support::write_package_version_error(res, updated.error());
+        return;
+      }
+
+      json_ok(res, vix::json::o("package_version", updated.value().to_json())); });
+
+    app.post("/api/package_versions/delete", [](vix::Request &req, vix::Response &res)
+             {
+      const auto &body = req.json();
+
+      if (!require_json_object(body, res))
+      {
+        return;
+      }
+
+      auto updated = package_version_service().set_status(read_package_version_lookup_request(body), "deleted");
+
+      if (updated.failed())
+      {
+        support::write_package_version_error(res, updated.error());
+        return;
+      }
+
+      json_ok(res, vix::json::o("package_version", updated.value().to_json())); });
+
     app.post("/api/package_versions/resolve", [](vix::Request &req, vix::Response &res)
              {
       const auto &body = req.json();

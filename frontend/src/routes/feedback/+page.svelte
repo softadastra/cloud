@@ -1,8 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import {
+    closeFeedback,
     createFeedback,
-    listMyFeedback
+    deleteFeedback,
+    listMyFeedback,
+    updateFeedback
   } from '$lib/api/feedback';
   import {
     ApiError,
@@ -55,6 +58,7 @@
 
   let loading = true;
   let saving = false;
+  let busyFeedbackId = '';
 
   let error = '';
   let success = '';
@@ -207,6 +211,62 @@
       openFeedbackId === itemId
         ? ''
         : itemId;
+  }
+
+  async function handleFeedbackAction(item: FeedbackItem, action: 'edit' | 'close' | 'delete') {
+    if (busyFeedbackId) {
+      return;
+    }
+
+    busyFeedbackId = item.id;
+    error = '';
+    success = '';
+
+    try {
+      if (action === 'edit') {
+        if (item.status !== 'open') {
+          error = 'Only open feedback can be edited.';
+          return;
+        }
+
+        const nextTitle = window.prompt('Feedback title', item.title);
+        if (nextTitle === null) return;
+        const nextMessage = window.prompt('Feedback message', item.message);
+        if (nextMessage === null) return;
+
+        const updated = await updateFeedback({
+          feedbackId: item.id,
+          category: item.category,
+          title: nextTitle.trim(),
+          message: nextMessage.trim()
+        });
+
+        feedback = feedback.map((entry) => entry.id === item.id ? updated : entry);
+        success = 'Feedback updated.';
+        return;
+      }
+
+      if (action === 'close') {
+        if (!window.confirm('Close this feedback item?')) return;
+        const updated = await closeFeedback(item.id);
+        feedback = feedback.map((entry) => entry.id === item.id ? updated : entry);
+        success = 'Feedback closed.';
+        return;
+      }
+
+      if (!window.confirm('Delete this feedback item?')) return;
+      await deleteFeedback(item.id);
+      feedback = feedback.filter((entry) => entry.id !== item.id);
+      openFeedbackId = '';
+      success = 'Feedback deleted.';
+    } catch (err) {
+      error =
+        err instanceof ApiError
+          ? err.message
+          : 'Unable to update feedback.';
+    } finally {
+      busyFeedbackId = '';
+    }
   }
 
   function handleSubmit(event: SubmitEvent) {
@@ -632,6 +692,18 @@
 
                 <p>{item.message}</p>
 
+                <div class="feedback-actions">
+                  {#if item.status === 'open'}
+                    <button type="button" disabled={busyFeedbackId === item.id} onclick={() => handleFeedbackAction(item, 'edit')}>Edit</button>
+                  {/if}
+
+                  {#if item.status !== 'closed'}
+                    <button type="button" disabled={busyFeedbackId === item.id} onclick={() => handleFeedbackAction(item, 'close')}>Close</button>
+                  {/if}
+
+                  <button class="danger-link" type="button" disabled={busyFeedbackId === item.id} onclick={() => handleFeedbackAction(item, 'delete')}>Delete</button>
+                </div>
+
                 <dl class="feedback-properties">
                   <div>
                     <dt>Category</dt>
@@ -674,6 +746,10 @@
     font-size: 13px;
     line-height: 1.6;
   }
+
+  .feedback-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+  .feedback-actions button { min-height: 32px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg-elevated); padding: 0 10px; color: var(--text-strong); font-size: 12px; font-weight: 700; }
+  .feedback-actions .danger-link { border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); color: var(--danger); }
 
   /* Summary */
 

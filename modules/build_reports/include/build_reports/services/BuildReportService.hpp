@@ -90,6 +90,10 @@ namespace cloud::build_reports::services
     BuildReportResult<dto::BuildReportResponse> find_build_report(
         const dto::BuildReportLookupRequest &request) const;
 
+    BuildReportResult<dto::BuildReportResponse> set_record_status(
+        const dto::BuildReportLookupRequest &request,
+        const std::string &record_status);
+
     BuildReportResult<std::vector<dto::BuildReportResponse>> list_build_reports(
         const dto::ListBuildReportsRequest &request) const;
 

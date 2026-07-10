@@ -124,6 +124,8 @@ namespace cloud::build_reports::services
       report.warnings_count = row.getInt64(13);
       report.errors_count = row.getInt64(14);
       report.created_at = row.getInt64(15);
+      report.record_status = row.getString(16);
+      report.deleted_at = row.getInt64(17);
       return report;
     }
 
@@ -239,7 +241,7 @@ namespace cloud::build_reports::services
     if (impl_->persistent())
     {
       auto rows = impl_->db->query(
-          "SELECT id, workspace_id, project_id, submitted_by_user_id, status, target, profile, branch, commit_sha, toolchain, summary_json, diagnostics_json, duration_ms, warnings_count, errors_count, created_at FROM build_reports WHERE id = ? AND workspace_id = ? AND project_id = ? LIMIT 1",
+          "SELECT id, workspace_id, project_id, submitted_by_user_id, status, target, profile, branch, commit_sha, toolchain, summary_json, diagnostics_json, duration_ms, warnings_count, errors_count, created_at, COALESCE(record_status, 'active'), COALESCE(deleted_at, 0) FROM build_reports WHERE id = ? AND workspace_id = ? AND project_id = ? AND COALESCE(record_status, 'active') != 'deleted' LIMIT 1",
           request.build_report_id, request.workspace_id, request.project_id);
       if (!rows->next())
       {
@@ -254,6 +256,46 @@ namespace cloud::build_reports::services
       return BuildReportResult<dto::BuildReportResponse>::failure({support::BuildReportErrorCode::BuildReportNotFound, "Build report not found."});
     }
     return BuildReportResult<dto::BuildReportResponse>::success(item->second);
+  }
+
+
+
+  BuildReportResult<dto::BuildReportResponse> BuildReportService::set_record_status(
+      const dto::BuildReportLookupRequest &request,
+      const std::string &record_status)
+  {
+    if (record_status != "active" && record_status != "deleted")
+    {
+      return BuildReportResult<dto::BuildReportResponse>::failure({support::BuildReportErrorCode::InvalidStatus, "Build report record status is invalid."});
+    }
+
+    auto current = find_build_report(request);
+    if (current.failed())
+    {
+      return current;
+    }
+
+    auto report = current.value();
+    report.record_status = record_status;
+    report.deleted_at = record_status == "deleted" ? now_timestamp() : 0;
+
+    if (impl_->persistent())
+    {
+      impl_->db->exec(
+          "UPDATE build_reports SET record_status = ?, deleted_at = ?, updated_at = ? WHERE id = ? AND workspace_id = ? AND project_id = ?",
+          report.record_status,
+          report.deleted_at,
+          now_timestamp(),
+          report.id,
+          report.workspace_id,
+          report.project_id);
+    }
+    else
+    {
+      impl_->reports_by_id[report.id] = report;
+    }
+
+    return BuildReportResult<dto::BuildReportResponse>::success(report);
   }
 
   BuildReportResult<std::vector<dto::BuildReportResponse>> BuildReportService::list_build_reports(const dto::ListBuildReportsRequest &request) const
@@ -271,7 +313,7 @@ namespace cloud::build_reports::services
     if (impl_->persistent())
     {
       auto rows = impl_->db->query(
-          "SELECT id, workspace_id, project_id, submitted_by_user_id, status, target, profile, branch, commit_sha, toolchain, summary_json, diagnostics_json, duration_ms, warnings_count, errors_count, created_at FROM build_reports WHERE workspace_id = ? AND project_id = ? ORDER BY created_at",
+          "SELECT id, workspace_id, project_id, submitted_by_user_id, status, target, profile, branch, commit_sha, toolchain, summary_json, diagnostics_json, duration_ms, warnings_count, errors_count, created_at, COALESCE(record_status, 'active'), COALESCE(deleted_at, 0) FROM build_reports WHERE workspace_id = ? AND project_id = ? AND COALESCE(record_status, 'active') != 'deleted' ORDER BY created_at",
           request.workspace_id, request.project_id);
       while (rows->next())
       {

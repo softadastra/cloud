@@ -41,3 +41,12 @@ export function submitBuildReport(input: {
     errors_count: input.errorsCount ?? 0
   });
 }
+
+
+export function deleteBuildReport(workspaceId: string, projectId: string, buildReportId: string) {
+  return api.post<{ build_report: BuildReport }>('/api/build_reports/delete', { workspace_id: workspaceId, project_id: projectId, build_report_id: buildReportId });
+}
+
+export function restoreBuildReport(workspaceId: string, projectId: string, buildReportId: string) {
+  return api.post<{ build_report: BuildReport }>('/api/build_reports/restore', { workspace_id: workspaceId, project_id: projectId, build_report_id: buildReportId });
+}

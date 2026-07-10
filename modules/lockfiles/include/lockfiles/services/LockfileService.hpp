@@ -90,6 +90,10 @@ namespace cloud::lockfiles::services
     LockfileResult<dto::LockfileResponse> find_lockfile(
         const dto::LockfileLookupRequest &request) const;
 
+    LockfileResult<dto::LockfileResponse> set_status(
+        const dto::LockfileLookupRequest &request,
+        const std::string &status);
+
     LockfileResult<std::vector<dto::LockfileResponse>> list_lockfiles(
         const dto::ListLockfilesRequest &request) const;
 

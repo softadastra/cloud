@@ -211,5 +211,45 @@ namespace cloud::lockfiles::controllers
           res,
           vix::json::o(
               "lockfile", lockfile.value().to_json())); });
+
+
+    app.post("/api/lockfiles/delete", [](vix::Request &req, vix::Response &res)
+             {
+      const auto &body = req.json();
+
+      if (!require_json_object(body, res))
+      {
+        return;
+      }
+
+      auto updated = lockfile_service().set_status(read_lockfile_lookup_request(body), "deleted");
+
+      if (updated.failed())
+      {
+        support::write_lockfile_error(res, updated.error());
+        return;
+      }
+
+      json_ok(res, vix::json::o("lockfile", updated.value().to_json())); });
+
+    app.post("/api/lockfiles/restore", [](vix::Request &req, vix::Response &res)
+             {
+      const auto &body = req.json();
+
+      if (!require_json_object(body, res))
+      {
+        return;
+      }
+
+      auto updated = lockfile_service().set_status(read_lockfile_lookup_request(body), "active");
+
+      if (updated.failed())
+      {
+        support::write_lockfile_error(res, updated.error());
+        return;
+      }
+
+      json_ok(res, vix::json::o("lockfile", updated.value().to_json())); });
+
   }
 } // namespace cloud::lockfiles::controllers

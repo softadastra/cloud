@@ -187,6 +187,10 @@ namespace cloud::package_versions::services
       version.size_bytes = row.getInt64(9);
       version.created_at = row.getInt64(10);
       version.updated_at = row.getInt64(11);
+      version.yanked_at = row.getInt64(12);
+      version.deprecated_at = row.getInt64(13);
+      version.deprecation_message = row.getString(14);
+      version.deleted_at = row.getInt64(15);
       return version;
     }
 
@@ -328,7 +332,7 @@ namespace cloud::package_versions::services
     if (impl_->persistent())
     {
       auto rows = impl_->db->query(
-          "SELECT id, workspace_id, package_id, published_by_user_id, version, archive_url, checksum_sha256, manifest_json, status, size_bytes, created_at, updated_at FROM package_versions WHERE id = ? AND workspace_id = ? AND package_id = ? LIMIT 1",
+          "SELECT id, workspace_id, package_id, published_by_user_id, version, archive_url, checksum_sha256, manifest_json, status, size_bytes, created_at, updated_at, COALESCE(yanked_at, 0), COALESCE(deprecated_at, 0), COALESCE(deprecation_message, ''), COALESCE(deleted_at, 0) FROM package_versions WHERE id = ? AND workspace_id = ? AND package_id = ? AND COALESCE(status, 'published') != 'deleted' LIMIT 1",
           request.version_id, request.workspace_id, request.package_id);
       if (!rows->next())
       {
@@ -363,7 +367,7 @@ namespace cloud::package_versions::services
     if (impl_->persistent())
     {
       auto rows = impl_->db->query(
-          "SELECT id, workspace_id, package_id, published_by_user_id, version, archive_url, checksum_sha256, manifest_json, status, size_bytes, created_at, updated_at FROM package_versions WHERE workspace_id = ? AND package_id = ? AND version = ? LIMIT 1",
+          "SELECT id, workspace_id, package_id, published_by_user_id, version, archive_url, checksum_sha256, manifest_json, status, size_bytes, created_at, updated_at, COALESCE(yanked_at, 0), COALESCE(deprecated_at, 0), COALESCE(deprecation_message, ''), COALESCE(deleted_at, 0) FROM package_versions WHERE workspace_id = ? AND package_id = ? AND version = ? AND COALESCE(status, 'published') NOT IN ('deleted', 'yanked') LIMIT 1",
           request.workspace_id, request.package_id, request.version);
       if (!rows->next())
       {
@@ -386,6 +390,55 @@ namespace cloud::package_versions::services
     return PackageVersionResult<dto::PackageVersionResponse>::success(version->second);
   }
 
+
+
+  PackageVersionResult<dto::PackageVersionResponse> PackageVersionService::set_status(
+      const dto::PackageVersionLookupRequest &request,
+      const std::string &status,
+      const std::string &deprecation_message)
+  {
+    if (status != "published" && status != "yanked" && status != "deprecated" && status != "deleted")
+    {
+      return PackageVersionResult<dto::PackageVersionResponse>::failure({support::PackageVersionErrorCode::InvalidVersion, "Package version status is invalid."});
+    }
+
+    auto current = find_package_version(request);
+    if (current.failed())
+    {
+      return current;
+    }
+
+    auto version = current.value();
+    const auto timestamp = now_timestamp();
+    version.status = status;
+    version.updated_at = timestamp;
+    version.yanked_at = status == "yanked" ? timestamp : 0;
+    version.deprecated_at = status == "deprecated" ? timestamp : 0;
+    version.deprecation_message = status == "deprecated" ? deprecation_message : "";
+    version.deleted_at = status == "deleted" ? timestamp : 0;
+
+    if (impl_->persistent())
+    {
+      impl_->db->exec(
+          "UPDATE package_versions SET status = ?, yanked_at = ?, deprecated_at = ?, deprecation_message = ?, deleted_at = ?, updated_at = ? WHERE id = ? AND workspace_id = ? AND package_id = ?",
+          version.status,
+          version.yanked_at,
+          version.deprecated_at,
+          version.deprecation_message,
+          version.deleted_at,
+          version.updated_at,
+          version.id,
+          version.workspace_id,
+          version.package_id);
+    }
+    else
+    {
+      impl_->versions_by_id[version.id] = version;
+    }
+
+    return PackageVersionResult<dto::PackageVersionResponse>::success(version);
+  }
+
   PackageVersionResult<std::vector<dto::PackageVersionResponse>> PackageVersionService::list_package_versions(const dto::ListPackageVersionsRequest &request) const
   {
     if (request.workspace_id.empty())
@@ -401,7 +454,7 @@ namespace cloud::package_versions::services
     if (impl_->persistent())
     {
       auto rows = impl_->db->query(
-          "SELECT id, workspace_id, package_id, published_by_user_id, version, archive_url, checksum_sha256, manifest_json, status, size_bytes, created_at, updated_at FROM package_versions WHERE workspace_id = ? AND package_id = ? ORDER BY created_at",
+          "SELECT id, workspace_id, package_id, published_by_user_id, version, archive_url, checksum_sha256, manifest_json, status, size_bytes, created_at, updated_at, COALESCE(yanked_at, 0), COALESCE(deprecated_at, 0), COALESCE(deprecation_message, ''), COALESCE(deleted_at, 0) FROM package_versions WHERE workspace_id = ? AND package_id = ? AND COALESCE(status, 'published') != 'deleted' ORDER BY created_at",
           request.workspace_id, request.package_id);
       while (rows->next())
       {

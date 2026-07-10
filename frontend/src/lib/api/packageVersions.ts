@@ -29,3 +29,20 @@ export function publishPackageVersion(input: {
     size_bytes: input.sizeBytes
   });
 }
+
+
+export function yankPackageVersion(workspaceId: string, packageId: string, versionId: string) {
+  return api.post<{ package_version: PackageVersion }>('/api/package_versions/yank', { workspace_id: workspaceId, package_id: packageId, version_id: versionId });
+}
+
+export function unyankPackageVersion(workspaceId: string, packageId: string, versionId: string) {
+  return api.post<{ package_version: PackageVersion }>('/api/package_versions/unyank', { workspace_id: workspaceId, package_id: packageId, version_id: versionId });
+}
+
+export function deprecatePackageVersion(workspaceId: string, packageId: string, versionId: string, deprecationMessage: string) {
+  return api.post<{ package_version: PackageVersion }>('/api/package_versions/deprecate', { workspace_id: workspaceId, package_id: packageId, version_id: versionId, deprecation_message: deprecationMessage });
+}
+
+export function deletePackageVersion(workspaceId: string, packageId: string, versionId: string) {
+  return api.post<{ package_version: PackageVersion }>('/api/package_versions/delete', { workspace_id: workspaceId, package_id: packageId, version_id: versionId });
+}

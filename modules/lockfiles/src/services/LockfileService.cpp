@@ -103,6 +103,8 @@ namespace cloud::lockfiles::services
       lockfile.lockfile_json = row.getString(5);
       lockfile.source = row.getString(6);
       lockfile.created_at = row.getInt64(7);
+      lockfile.status = row.getString(8);
+      lockfile.deleted_at = row.getInt64(9);
       return lockfile;
     }
 
@@ -191,7 +193,7 @@ namespace cloud::lockfiles::services
     if (impl_->persistent())
     {
       auto rows = impl_->db->query(
-          "SELECT id, workspace_id, project_id, uploaded_by_user_id, checksum_sha256, lockfile_json, source, created_at FROM lockfiles WHERE id = ? AND workspace_id = ? AND project_id = ? LIMIT 1",
+          "SELECT id, workspace_id, project_id, uploaded_by_user_id, checksum_sha256, lockfile_json, source, created_at, COALESCE(status, 'active'), COALESCE(deleted_at, 0) FROM lockfiles WHERE id = ? AND workspace_id = ? AND project_id = ? AND COALESCE(status, 'active') != 'deleted' LIMIT 1",
           request.lockfile_id, request.workspace_id, request.project_id);
       if (!rows->next())
       {
@@ -206,6 +208,46 @@ namespace cloud::lockfiles::services
       return LockfileResult<dto::LockfileResponse>::failure({support::LockfileErrorCode::LockfileNotFound, "Lockfile not found."});
     }
     return LockfileResult<dto::LockfileResponse>::success(item->second);
+  }
+
+
+
+  LockfileResult<dto::LockfileResponse> LockfileService::set_status(
+      const dto::LockfileLookupRequest &request,
+      const std::string &status)
+  {
+    if (status != "active" && status != "deleted")
+    {
+      return LockfileResult<dto::LockfileResponse>::failure({support::LockfileErrorCode::InvalidChecksum, "Lockfile status is invalid."});
+    }
+
+    auto current = find_lockfile(request);
+    if (current.failed())
+    {
+      return current;
+    }
+
+    auto lockfile = current.value();
+    lockfile.status = status;
+    lockfile.deleted_at = status == "deleted" ? now_timestamp() : 0;
+
+    if (impl_->persistent())
+    {
+      impl_->db->exec(
+          "UPDATE lockfiles SET status = ?, deleted_at = ?, updated_at = ? WHERE id = ? AND workspace_id = ? AND project_id = ?",
+          lockfile.status,
+          lockfile.deleted_at,
+          now_timestamp(),
+          lockfile.id,
+          lockfile.workspace_id,
+          lockfile.project_id);
+    }
+    else
+    {
+      impl_->lockfiles_by_id[lockfile.id] = lockfile;
+    }
+
+    return LockfileResult<dto::LockfileResponse>::success(lockfile);
   }
 
   LockfileResult<std::vector<dto::LockfileResponse>> LockfileService::list_lockfiles(const dto::ListLockfilesRequest &request) const
@@ -223,7 +265,7 @@ namespace cloud::lockfiles::services
     if (impl_->persistent())
     {
       auto rows = impl_->db->query(
-          "SELECT id, workspace_id, project_id, uploaded_by_user_id, checksum_sha256, lockfile_json, source, created_at FROM lockfiles WHERE workspace_id = ? AND project_id = ? ORDER BY created_at",
+          "SELECT id, workspace_id, project_id, uploaded_by_user_id, checksum_sha256, lockfile_json, source, created_at, COALESCE(status, 'active'), COALESCE(deleted_at, 0) FROM lockfiles WHERE workspace_id = ? AND project_id = ? AND COALESCE(status, 'active') != 'deleted' ORDER BY created_at",
           request.workspace_id, request.project_id);
       while (rows->next())
       {
