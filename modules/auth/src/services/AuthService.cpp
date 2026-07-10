@@ -299,6 +299,39 @@ namespace cloud::auth::services
       return rixlib::auth::AuthResult<dto::AuthUserResponse>::success(user);
     }
 
+    void create_public_activity_event(
+        const std::string &user_id,
+        const std::string &type,
+        const std::string &title,
+        const std::string &data_json)
+    {
+      ensure_user_profiles_table();
+      db_->exec(
+          "CREATE TABLE IF NOT EXISTS public_activity_events ("
+          "id TEXT PRIMARY KEY, "
+          "user_id TEXT NOT NULL, "
+          "workspace_id TEXT, "
+          "project_id TEXT, "
+          "package_id TEXT, "
+          "type TEXT NOT NULL, "
+          "title TEXT NOT NULL, "
+          "data_json TEXT, "
+          "visibility TEXT NOT NULL DEFAULT 'public', "
+          "created_at INTEGER NOT NULL)");
+
+      const auto now = now_timestamp();
+      db_->exec(
+          "INSERT INTO public_activity_events "
+          "(id, user_id, workspace_id, project_id, package_id, type, title, data_json, visibility, created_at) "
+          "VALUES (?, ?, NULL, NULL, NULL, ?, ?, ?, 'public', ?)",
+          std::string{"activity_"} + make_profile_id(),
+          user_id,
+          type,
+          title,
+          data_json,
+          now);
+    }
+
     bool username_taken(const std::string &user_id, const std::string &username)
     {
       if (username.empty())
@@ -477,6 +510,15 @@ namespace cloud::auth::services
         request.public_profile_enabled ? static_cast<std::int64_t>(1) : static_cast<std::int64_t>(0),
         now_timestamp(),
         user_id);
+
+    if (request.public_profile_enabled && !username.empty())
+    {
+      impl_->create_public_activity_event(
+          user_id,
+          "profile_updated",
+          "Profile updated",
+          "{}");
+    }
 
     return impl_->find_user_profile(user_id);
   }

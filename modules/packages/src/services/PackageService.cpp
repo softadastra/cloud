@@ -110,6 +110,42 @@ namespace cloud::packages::services
     {
       return workspace_id + "::" + name;
     }
+
+    void create_public_package_activity(
+        vix::db::Database &db,
+        const dto::PackageResponse &package)
+    {
+      if (package.visibility != "public" || !package.active)
+      {
+        return;
+      }
+
+      db.exec(
+          "CREATE TABLE IF NOT EXISTS public_activity_events ("
+          "id TEXT PRIMARY KEY, "
+          "user_id TEXT NOT NULL, "
+          "workspace_id TEXT, "
+          "project_id TEXT, "
+          "package_id TEXT, "
+          "type TEXT NOT NULL, "
+          "title TEXT NOT NULL, "
+          "data_json TEXT, "
+          "visibility TEXT NOT NULL DEFAULT 'public', "
+          "created_at INTEGER NOT NULL)");
+
+      const auto now = now_timestamp();
+      db.exec(
+          "INSERT INTO public_activity_events "
+          "(id, user_id, workspace_id, project_id, package_id, type, title, data_json, visibility, created_at) "
+          "VALUES (?, ?, ?, NULL, ?, 'public_package_created', ?, ?, 'public', ?)",
+          std::string{"activity_package_"} + package.id,
+          package.owner_user_id,
+          package.workspace_id,
+          package.id,
+          "Public package created",
+          std::string{"{\"package\":\""} + package.name + "\"}",
+          now);
+    }
   } // namespace
 
   class PackageService::Impl
@@ -222,6 +258,8 @@ namespace cloud::packages::services
             "INSERT INTO packages (id, workspace_id, owner_user_id, name, description, repository_url, visibility, active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             package.id, package.workspace_id, package.owner_user_id, package.name, package.description, package.repository_url, package.visibility,
             static_cast<std::int64_t>(1), package.created_at, package.updated_at);
+
+        create_public_package_activity(*impl_->db, package);
 
         return PackageResult<dto::PackageResponse>::success(package);
       }

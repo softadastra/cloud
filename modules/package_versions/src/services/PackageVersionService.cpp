@@ -93,6 +93,56 @@ namespace cloud::package_versions::services
     {
       return workspace_id + "::" + package_id + "::" + version;
     }
+
+    void create_public_package_version_activity(
+        vix::db::Database &db,
+        const dto::PackageVersionResponse &version)
+    {
+      auto package_rows = db.query(
+          "SELECT name, visibility, active FROM packages WHERE id = ? AND workspace_id = ? LIMIT 1",
+          version.package_id,
+          version.workspace_id);
+
+      if (!package_rows->next())
+      {
+        return;
+      }
+
+      const auto &package = package_rows->row();
+      const auto package_name = package.getString(0);
+      const auto visibility = package.getString(1);
+      const auto active = package.getInt64(2) != 0;
+
+      if (visibility != "public" || !active)
+      {
+        return;
+      }
+
+      db.exec(
+          "CREATE TABLE IF NOT EXISTS public_activity_events ("
+          "id TEXT PRIMARY KEY, "
+          "user_id TEXT NOT NULL, "
+          "workspace_id TEXT, "
+          "project_id TEXT, "
+          "package_id TEXT, "
+          "type TEXT NOT NULL, "
+          "title TEXT NOT NULL, "
+          "data_json TEXT, "
+          "visibility TEXT NOT NULL DEFAULT 'public', "
+          "created_at INTEGER NOT NULL)");
+
+      db.exec(
+          "INSERT INTO public_activity_events "
+          "(id, user_id, workspace_id, project_id, package_id, type, title, data_json, visibility, created_at) "
+          "VALUES (?, ?, ?, NULL, ?, 'public_package_version_published', ?, ?, 'public', ?)",
+          std::string{"activity_version_"} + version.id,
+          version.published_by_user_id,
+          version.workspace_id,
+          version.package_id,
+          "Public package version published",
+          std::string{"{\"package\":\""} + package_name + "\",\"version\":\"" + version.version + "\"}",
+          version.created_at);
+    }
   } // namespace
 
   class PackageVersionService::Impl
@@ -227,6 +277,7 @@ namespace cloud::package_versions::services
         note.message = "A package version was published: " + version.version + ".";
         note.data_json = "{}";
         notifications.create_for_workspace_members(note);
+        create_public_package_version_activity(*impl_->db, version);
 
         return PackageVersionResult<dto::PackageVersionResponse>::success(version);
       }

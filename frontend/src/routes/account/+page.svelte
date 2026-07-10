@@ -78,6 +78,10 @@
       : `${API_BASE_URL}${user.avatar_url}`
     : '';
 
+  $: publicProfileUrl = normalizedUsername ? `/u/${normalizedUsername}` : '';
+
+  $: canViewPublicProfile = publicProfileEnabled && Boolean(normalizedUsername);
+
   $: profileChanged =
     normalizedDisplayName !== savedDisplayName ||
     normalizedUsername !== savedUsername ||
@@ -697,14 +701,33 @@
           </label>
         </div>
 
-        <label class="checkbox-row">
-          <input
-            bind:checked={publicProfileEnabled}
-            type="checkbox"
-          />
+        <div class="public-profile-box">
+          <label class="checkbox-row">
+            <input
+              bind:checked={publicProfileEnabled}
+              type="checkbox"
+            />
 
-          <span>Public profile enabled</span>
-        </label>
+            <span>Public profile enabled</span>
+          </label>
+
+          <p>
+            Public profile lets other people see your name, avatar, bio, links,
+            and public package activity. Private workspaces, lockfiles, build
+            reports, tokens, members, and private packages are never shown.
+          </p>
+
+          {#if canViewPublicProfile}
+            <a
+              class="view-profile-link"
+              href={publicProfileUrl}
+            >
+              View public profile
+            </a>
+          {:else}
+            <small>Choose a username and enable your public profile to view it.</small>
+          {/if}
+        </div>
 
         {#if profileMessage}
           <p
@@ -1295,6 +1318,29 @@
     width: 16px;
     height: 16px;
     flex: 0 0 auto;
+  }
+
+  .public-profile-box {
+    display: grid;
+    gap: 9px;
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius-sm);
+    background: var(--bg-ink-soft);
+    padding: 12px;
+  }
+
+  .public-profile-box p,
+  .public-profile-box small {
+    color: var(--text-muted);
+    font-size: 10.5px;
+    line-height: 1.55;
+  }
+
+  .view-profile-link {
+    width: fit-content;
+    color: var(--link);
+    font-size: 11.5px;
+    font-weight: 650;
   }
 
   .new-password-grid {

@@ -58,7 +58,9 @@ namespace cloud::auth::middleware
              path == "/api/ready" ||
              path == "/health" ||
              path == "/ready" ||
-             starts_with(path, "/api/auth");
+             starts_with(path, "/api/auth") ||
+             starts_with(path, "/api/public") ||
+             starts_with(path, "/storage/users/");
     }
 
     bool is_module_probe(

@@ -152,6 +152,11 @@
       : `${API_BASE_URL}${$auth.user.avatar_url}`
     : '';
 
+  $: publicProfileHref =
+    $auth.user?.public_profile_enabled && $auth.user?.username
+      ? `/u/${$auth.user.username}`
+      : '';
+
   $: unread = $notifications.unreadCount;
 
   $: if (
@@ -716,6 +721,27 @@
 
                 <span>Account settings</span>
               </button>
+
+              {#if publicProfileHref}
+                <a
+                  class="account-menu__item"
+                  href={publicProfileHref}
+                  onclick={() => {
+                    accountMenuOpen = false;
+                    closeMobileSidebar();
+                  }}
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z"></path>
+                    <path d="M3.6 9h16.8M3.6 15h16.8M12 3c2 2.4 3 5.4 3 9s-1 6.6-3 9M12 3c-2 2.4-3 5.4-3 9s1 6.6 3 9"></path>
+                  </svg>
+
+                  <span>View public profile</span>
+                </a>
+              {/if}
 
               <div class="account-menu__separator"></div>
 

@@ -51,6 +51,45 @@ export type UpdateProfilePayload = {
   public_profile_enabled: boolean;
 };
 
+export type PublicProfile = {
+  display_name: string;
+  username: string;
+  bio: string;
+  avatar_url: string;
+  website_url: string;
+  github_url: string;
+  public_profile_enabled: boolean;
+};
+
+export type PublicPackageSummary = {
+  id: string;
+  name: string;
+  description: string;
+  repository_url: string;
+  visibility: 'public' | string;
+  created_at: number;
+  updated_at: number;
+};
+
+export type PublicActivityEvent = {
+  id: string;
+  package_id: string;
+  type: string;
+  title: string;
+  data_json: string;
+  created_at: number;
+};
+
+export type PublicProfileResponse = {
+  profile: PublicProfile;
+  public_packages: PublicPackageSummary[];
+  public_activity: PublicActivityEvent[];
+  stats: {
+    public_packages_count: number;
+    public_contributions_count: number;
+  };
+};
+
 export type Session = {
   id: string;
   expires_at: number;

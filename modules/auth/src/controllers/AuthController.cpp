@@ -23,8 +23,11 @@
 #include <cctype>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <string>
 #include <vix.hpp>
+#include <vix/config/Config.hpp>
+#include <vix/db/db.hpp>
 
 namespace cloud::auth::controllers
 {
@@ -260,6 +263,148 @@ namespace cloud::auth::controllers
       }
 
       return {};
+    }
+
+    bool is_public_profile_visible(bool enabled, const std::string &username)
+    {
+      return enabled && !username.empty();
+    }
+
+    bool is_public_package_visible(const std::string &visibility, bool active)
+    {
+      return active && visibility == "public";
+    }
+
+    bool can_expose_public_activity(const std::string &visibility)
+    {
+      return visibility == "public";
+    }
+
+    void ensure_public_activity_table(vix::db::Database &db)
+    {
+      db.exec(
+          "CREATE TABLE IF NOT EXISTS public_activity_events ("
+          "id TEXT PRIMARY KEY, "
+          "user_id TEXT NOT NULL, "
+          "workspace_id TEXT, "
+          "project_id TEXT, "
+          "package_id TEXT, "
+          "type TEXT NOT NULL, "
+          "title TEXT NOT NULL, "
+          "data_json TEXT, "
+          "visibility TEXT NOT NULL DEFAULT 'public', "
+          "created_at INTEGER NOT NULL)");
+    }
+
+    void public_profile_show(vix::Request &req, vix::Response &res)
+    {
+      const auto username = req.has_query("username") ? req.query_value("username") : std::string{};
+
+      if (username.empty())
+      {
+        json_error(res, 400, "username_required", "Username is required.");
+        return;
+      }
+
+      try
+      {
+        vix::config::Config cfg{".env"};
+        vix::db::Database db{cfg};
+        ensure_public_activity_table(db);
+
+        auto profile_rows = db.query(
+            "SELECT user_id, COALESCE(display_name, ''), COALESCE(username, ''), COALESCE(bio, ''), "
+            "COALESCE(avatar_url, ''), COALESCE(website_url, ''), COALESCE(github_url, ''), public_profile_enabled "
+            "FROM user_profiles WHERE username = ? LIMIT 1",
+            username);
+
+        if (!profile_rows->next())
+        {
+          json_error(res, 404, "profile_not_found", "Profile was not found.");
+          return;
+        }
+
+        const auto &profile_row = profile_rows->row();
+        const auto user_id = profile_row.getString(0);
+        const auto profile_username = profile_row.getString(2);
+        const auto profile_enabled = profile_row.getInt64(7) != 0;
+
+        if (!is_public_profile_visible(profile_enabled, profile_username))
+        {
+          json_error(res, 404, "profile_not_found", "Profile was not found.");
+          return;
+        }
+
+        auto packages = vix::json::Json::array();
+        auto package_rows = db.query(
+            "SELECT id, name, COALESCE(description, ''), COALESCE(repository_url, ''), visibility, active, created_at, updated_at "
+            "FROM packages WHERE owner_user_id = ? AND visibility = 'public' AND active = 1 ORDER BY updated_at DESC LIMIT 50",
+            user_id);
+
+        while (package_rows->next())
+        {
+          const auto &row = package_rows->row();
+          if (!is_public_package_visible(row.getString(4), row.getInt64(5) != 0))
+          {
+            continue;
+          }
+
+          auto package_json = vix::json::Json::object();
+          package_json["id"] = row.getString(0);
+          package_json["name"] = row.getString(1);
+          package_json["description"] = row.getString(2);
+          package_json["repository_url"] = row.getString(3);
+          package_json["visibility"] = row.getString(4);
+          package_json["created_at"] = row.getInt64(6);
+          package_json["updated_at"] = row.getInt64(7);
+          packages.push_back(package_json);
+        }
+
+        auto activity = vix::json::Json::array();
+        auto activity_rows = db.query(
+            "SELECT id, COALESCE(package_id, ''), type, title, COALESCE(data_json, '{}'), visibility, created_at "
+            "FROM public_activity_events WHERE user_id = ? AND visibility = 'public' ORDER BY created_at DESC LIMIT 30",
+            user_id);
+
+        std::int64_t contribution_count = 0;
+        while (activity_rows->next())
+        {
+          const auto &row = activity_rows->row();
+          if (!can_expose_public_activity(row.getString(5)))
+          {
+            continue;
+          }
+
+          contribution_count += 1;
+          auto activity_json = vix::json::Json::object();
+          activity_json["id"] = row.getString(0);
+          activity_json["package_id"] = row.getString(1);
+          activity_json["type"] = row.getString(2);
+          activity_json["title"] = row.getString(3);
+          activity_json["data_json"] = row.getString(4);
+          activity_json["created_at"] = row.getInt64(6);
+          activity.push_back(activity_json);
+        }
+
+        json_ok(res, vix::json::o(
+            "profile", vix::json::o(
+                "display_name", profile_row.getString(1),
+                "username", profile_username,
+                "bio", profile_row.getString(3),
+                "avatar_url", profile_row.getString(4),
+                "website_url", profile_row.getString(5),
+                "github_url", profile_row.getString(6),
+                "public_profile_enabled", profile_enabled),
+            "public_packages", packages,
+            "public_activity", activity,
+            "stats", vix::json::o(
+                "public_packages_count", static_cast<std::int64_t>(packages.size()),
+                "public_contributions_count", contribution_count)));
+      }
+      catch (...)
+      {
+        json_error(res, 500, "public_profile_error", "Could not load public profile.");
+      }
     }
 
     std::string content_type_for_avatar_filename(const std::string &filename)
@@ -583,6 +728,12 @@ namespace cloud::auth::controllers
       }
 
       json_ok(res, vix::json::o("message", "Avatar removed.")); });
+
+    app.post("/api/public/users/show", [](vix::Request &req, vix::Response &res)
+             { public_profile_show(req, res); });
+
+    app.get("/api/public/users/show", [](vix::Request &req, vix::Response &res)
+            { public_profile_show(req, res); });
 
     app.get("/storage/users/{user_id}/{filename}", [](vix::Request &req, vix::Response &res)
             {
