@@ -1,5 +1,5 @@
 import { api } from './client';
-import type { LoginData, RegisterData, UpdateProfilePayload, User } from './types';
+import type { LoginData, PlatformAdminInfo, RegisterData, UpdateProfilePayload, User } from './types';
 
 export function login(email: string, password: string) {
   return api.post<LoginData>('/api/auth/login', { email, password });
@@ -11,7 +11,7 @@ export function register(name: string, email: string, password: string) {
 
 
 export function me(sessionId: string) {
-  return api.post<{ user: User; session: LoginData['session'] }>('/api/auth/me', { session_id: sessionId });
+  return api.post<{ user: User; platform_admin?: PlatformAdminInfo; session: LoginData['session'] }>('/api/auth/me', { session_id: sessionId });
 }
 
 export function updateProfile(sessionId: string, payload: UpdateProfilePayload) {

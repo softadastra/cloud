@@ -24,6 +24,8 @@
   const SIDEBAR_GROUPS_KEY =
     'softadastra-cloud:sidebar-groups';
 
+  $: visibleNavigationGroups = navigationGroups.filter((group) => group.key !== 'admin' || Boolean($auth.user?.platform_admin));
+
   const navigationGroups = [
     {
       key: 'workspace',
@@ -98,6 +100,18 @@
       ]
     },
     {
+      key: 'admin',
+      label: 'Internal',
+      items: [
+        {
+          href: '/admin',
+          label: 'Administration',
+          icon:
+            'M12 3 20 7v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7l8-4Zm0 6v5M12 17h.01'
+        }
+      ]
+    },
+    {
       key: 'support',
       label: 'Support',
       items: [
@@ -126,7 +140,8 @@
     workspace: true,
     registry: true,
     operations: true,
-    support: true
+    support: true,
+    admin: false
   };
 
   $: currentPath = $page.url.pathname;
@@ -442,7 +457,7 @@ $: standalonePage =
       }
     }
 
-    for (const group of navigationGroups) {
+    for (const group of visibleNavigationGroups) {
       if (groupContainsActiveRoute(group)) {
         expandedGroups = {
           ...expandedGroups,
@@ -672,7 +687,7 @@ $: standalonePage =
         class="sidebar-nav"
         aria-label="Primary navigation"
       >
-        {#each navigationGroups as group (group.key)}
+        {#each visibleNavigationGroups as group (group.key)}
           <section
             class:contains-active={groupContainsActiveRoute(group)}
             class="nav-group"

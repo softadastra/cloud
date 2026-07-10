@@ -23,6 +23,101 @@ export class ApiError extends Error {
   }
 }
 
+
+export type PlatformAdminInfo = {
+  role: 'owner' | 'admin' | 'viewer' | string;
+} | null;
+
+export type AdminModule = {
+  key: string;
+  name: string;
+  description: string;
+  actions: string[];
+};
+
+export type AdminOverview = {
+  platform_admin: PlatformAdminInfo;
+  stats: Record<string, number>;
+  recent_activity: AdminAuditLog[];
+  recent_feedback: AdminFeedbackSummary[];
+  recent_supporters: AdminSupporterSummary[];
+};
+
+export type AdminUserSummary = {
+  id: string;
+  email: string;
+  active: boolean;
+  created_at: number;
+  display_name: string;
+  username: string;
+  public_profile_enabled: boolean;
+  supporter_tier: string;
+  supporter_status: string;
+};
+
+export type AdminPackageSummary = {
+  id: string;
+  workspace_id: string;
+  owner_user_id: string;
+  name: string;
+  description: string;
+  repository_url: string;
+  visibility: string;
+  active: boolean;
+  created_at: number;
+  updated_at: number;
+  workspace_name: string;
+  owner_email: string;
+};
+
+export type AdminFeedbackSummary = {
+  id: string;
+  user_id: string;
+  user_email?: string;
+  workspace_id: string;
+  category: string;
+  title: string;
+  message?: string;
+  status: string;
+  created_at: number;
+  updated_at?: number;
+};
+
+export type AdminSupporterSummary = {
+  id: string;
+  user_id: string;
+  tier: SupportPlanTier | string;
+  status: string;
+  display_name: string;
+  username: string;
+  project_name: string;
+  website_url: string;
+  github_url: string;
+  public_visible: boolean;
+  stronger_visibility: boolean;
+  started_at: number;
+  expires_at: number;
+  created_at: number;
+  updated_at: number;
+};
+
+export type AdminSupporterInput = Partial<AdminSupporterSummary> & {
+  display_name: string;
+  tier: string;
+};
+
+export type AdminAuditLog = {
+  id: string;
+  admin_user_id: string;
+  action: string;
+  target_type: string;
+  target_id: string;
+  metadata_json: string;
+  ip_address: string;
+  user_agent: string;
+  created_at: number;
+};
+
 export type UserProfile = {
   display_name?: string;
   username?: string;
@@ -34,6 +129,7 @@ export type UserProfile = {
 };
 
 export type User = UserProfile & {
+  platform_admin?: PlatformAdminInfo;
   id: string;
   name: string;
   email: string;
@@ -151,6 +247,7 @@ export type Session = {
 
 export type LoginData = {
   user: User;
+  platform_admin?: PlatformAdminInfo;
   session: Session;
   token?: {
     value: string;
