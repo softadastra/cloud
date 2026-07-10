@@ -17,7 +17,7 @@ export class ApiError extends Error {
 
   constructor(status: number, code: string, message: string) {
     super(message);
-    this.name = 'ApiError';
+    this.name = "ApiError";
     this.status = status;
     this.code = code;
   }
@@ -66,7 +66,7 @@ export type PublicPackageSummary = {
   name: string;
   description: string;
   repository_url: string;
-  visibility: 'public' | string;
+  visibility: "public" | string;
   created_at: number;
   updated_at: number;
   latest_version?: string;
@@ -100,6 +100,8 @@ export type PublicProfileResponse = {
   pinned_packages: PublicPackageSummary[];
   public_packages: PublicPackageSummary[];
   contribution_grid: ContributionGridDay[];
+  contribution_years: number[];
+  selected_contribution_year: number;
   recent_activity: PublicActivityEvent[];
   public_activity?: PublicActivityEvent[];
   stats: PublicProfileStats;
@@ -134,9 +136,9 @@ export type Workspace = {
   name: string;
   slug: string;
   owner_user_id: string;
-  current_user_role?: 'owner' | 'admin' | 'member' | 'viewer' | string;
-  current_user_status?: 'active' | 'suspended' | 'removed' | string;
-  access_scope?: 'entire_workspace' | 'selected_projects' | string;
+  current_user_role?: "owner" | "admin" | "member" | "viewer" | string;
+  current_user_status?: "active" | "suspended" | "removed" | string;
+  access_scope?: "entire_workspace" | "selected_projects" | string;
   project_ids_json?: string;
   current_user_is_owner?: boolean;
   active: boolean;
@@ -163,9 +165,9 @@ export type Member = {
   workspace_id: string;
   user_id: string;
   email: string;
-  role: 'owner' | 'admin' | 'member' | 'viewer' | string;
-  status: 'active' | 'suspended' | 'removed' | string;
-  access_scope?: 'entire_workspace' | 'selected_projects' | string;
+  role: "owner" | "admin" | "member" | "viewer" | string;
+  status: "active" | "suspended" | "removed" | string;
+  access_scope?: "entire_workspace" | "selected_projects" | string;
   project_ids_json?: string;
   invited_by_user_id: string;
   created_at: number;
@@ -209,7 +211,7 @@ export type PackageVersion = {
   manifest_json: string;
   size_bytes: number;
   status: string;
-  access_scope?: 'entire_workspace' | 'selected_projects' | string;
+  access_scope?: "entire_workspace" | "selected_projects" | string;
   project_ids_json?: string;
   created_at: number;
   updated_at: number;
@@ -245,7 +247,6 @@ export type BuildReport = {
   created_at: number;
 };
 
-
 export type WorkspaceInvite = {
   id: string;
   workspace_id: string;
@@ -255,7 +256,7 @@ export type WorkspaceInvite = {
   role: string;
   invited_by_user_id: string;
   status: string;
-  access_scope?: 'entire_workspace' | 'selected_projects' | string;
+  access_scope?: "entire_workspace" | "selected_projects" | string;
   project_ids_json?: string;
   created_at: number;
   updated_at: number;
@@ -271,7 +272,6 @@ export type PackageVersionsData = { package_versions: PackageVersion[] };
 export type LockfilesData = { lockfiles: Lockfile[] };
 export type BuildReportsData = { build_reports: BuildReport[] };
 export type WorkspaceInvitesData = { invites: WorkspaceInvite[] };
-
 
 export type NotificationItem = {
   id: string;

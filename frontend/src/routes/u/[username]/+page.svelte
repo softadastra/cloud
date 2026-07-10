@@ -14,6 +14,21 @@
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? (browser ? window.location.protocol + '//' + window.location.hostname + ':8080' : '');
   const validTabs = new Set(['overview', 'packages', 'activity']);
 
+  function isEmailLike(value?: string) {
+    if (!value) {
+      return false;
+    }
+
+    const trimmed = value.trim();
+    const at = trimmed.indexOf('@');
+
+    return (
+      at > 0 &&
+      at < trimmed.length - 1 &&
+      trimmed.indexOf('.', at + 1) > at + 1
+    );
+  }
+
   let data: PublicProfileResponse | null = null;
   let loading = true;
   let error = '';
@@ -23,17 +38,48 @@
   let pinMessage = '';
   let pinError = '';
   let savingPins = false;
+  let selectedYear = new Date().getUTCFullYear();
+  let contributionLoading = false;
 
   $: username = $page.params.username ?? '';
   $: requestedTab = $page.url.searchParams.get('tab') ?? 'overview';
   $: activeTab = validTabs.has(requestedTab) ? requestedTab : 'overview';
   $: profile = data?.profile;
-  $: initial = (profile?.display_name || profile?.username || 'U').slice(0, 1).toUpperCase();
-  $: avatarUrl = profile?.avatar_url ? (profile.avatar_url.startsWith('http') ? profile.avatar_url : API_BASE_URL + profile.avatar_url) : '';
-  $: isOwner = Boolean($auth.user?.username && profile?.username && $auth.user.username === profile.username);
-  $: canCustomizePins = isOwner && Boolean($auth.user?.public_profile_enabled && $auth.user?.username);
+
+  $: publicUsername =
+    profile?.username &&
+    !isEmailLike(profile.username)
+      ? profile.username
+      : '';
+
+  $: publicDisplayName =
+    profile?.display_name &&
+    !isEmailLike(profile.display_name)
+      ? profile.display_name
+      : publicUsername || 'Softadastra developer';
+
+  $: initial = publicDisplayName
+    .slice(0, 1)
+    .toUpperCase();
+
+  $: avatarUrl = profile?.avatar_url
+    ? (
+        profile.avatar_url.startsWith('http')
+          ? profile.avatar_url
+          : API_BASE_URL + profile.avatar_url
+      )
+    : '';
+$: isOwner = Boolean(
+  $auth.session &&
+  $auth.user?.username &&
+  username &&
+  $auth.user.username.toLowerCase() ===
+    username.toLowerCase()
+);
+
+$: canCustomizePins = isOwner;
   $: packagePreview = (data?.public_packages ?? []).slice(0, 6);
-  $: activityPreview = (data?.recent_activity ?? []).slice(0, 6);
+  $: contributionYears = data?.contribution_years ?? [selectedYear];
 
   function tabHref(tab: string) {
     return tab === 'overview' ? `/u/${encodeURIComponent(username)}` : `/u/${encodeURIComponent(username)}?tab=${tab}`;
@@ -56,6 +102,51 @@
     if (event.type === 'public_package_version_published' && parsed.package && parsed.version) return 'Published version ' + parsed.version + ' of ' + parsed.package;
     if (event.type === 'profile_updated') return 'Updated public profile';
     return event.title;
+  }
+
+  function activityKind(event: PublicActivityEvent) {
+    if (event.type === 'public_package_version_published') return 'Version';
+    if (event.type === 'public_package_created') return 'Package';
+    if (event.type === 'profile_updated') return 'Profile';
+    return 'Activity';
+  }
+
+  function activityIcon(event: PublicActivityEvent) {
+    if (event.type === 'public_package_version_published') return 'tag';
+    if (event.type === 'public_package_created') return 'box';
+    return 'profile';
+  }
+
+  function activityDay(value: number) {
+    const date = new Date(value < 1_000_000_000_000 ? value * 1000 : value);
+    return new Intl.DateTimeFormat(undefined, {
+      weekday: 'short', day: 'numeric', month: 'short', year: 'numeric'
+    }).format(date);
+  }
+
+  function groupedActivity(events: PublicActivityEvent[]) {
+    const groups = new Map<string, PublicActivityEvent[]>();
+    for (const event of events) {
+      const key = activityDay(event.created_at);
+      groups.set(key, [...(groups.get(key) ?? []), event]);
+    }
+    return [...groups.entries()].map(([date, items]) => ({ date, items }));
+  }
+
+  async function changeContributionYear(year: number) {
+    if (!data || year === selectedYear) return;
+    contributionLoading = true;
+    try {
+      const next = await getPublicProfile(username, year);
+      data = { ...data, contribution_grid: next.contribution_grid,
+        contribution_years: next.contribution_years,
+        selected_contribution_year: next.selected_contribution_year };
+      selectedYear = next.selected_contribution_year;
+    } catch (err) {
+      error = err instanceof ApiError ? err.message : 'Unable to load contribution activity.';
+    } finally {
+      contributionLoading = false;
+    }
   }
 
   function packageHref(packageItem: PublicPackageSummary) {
@@ -111,6 +202,7 @@
 
     try {
       data = await getPublicProfile(username);
+      selectedYear = data.selected_contribution_year ?? new Date().getUTCFullYear();
       selectedPinIds = data.pinned_packages.map((item) => item.id);
 
       if (browser && new URLSearchParams(window.location.search).get('pins') === '1') {
@@ -158,22 +250,33 @@
   {#if events.length === 0}
     <EmptyState title="No public activity yet" body="Public package and profile activity will appear here." />
   {:else}
-    <ol class="activity-list">
-      {#each events as event (event.id)}
-        <li>
-          <span class="activity-dot" aria-hidden="true"></span>
-          <div>
-            <strong>{activityLabel(event)}</strong>
-            <div class="activity-meta"><span>{event.type.replaceAll('_', ' ')}</span><time datetime={String(event.created_at)}>{formatDate(event.created_at)}</time></div>
-          </div>
-        </li>
+    <div class="activity-timeline">
+      {#each groupedActivity(events) as group (group.date)}
+        <section class="activity-group">
+          <h3>{group.date}</h3>
+          <ol>
+            {#each group.items as event (event.id)}
+              <li>
+                <span class={`event-icon ${activityIcon(event)}`} aria-hidden="true">
+                  {#if activityIcon(event) === 'tag'}#
+                  {:else if activityIcon(event) === 'box'}□
+                  {:else}●{/if}
+                </span>
+                <div class="event-copy">
+                  <strong>{activityLabel(event)}</strong>
+                  <span>{activityKind(event)} · {formatDate(event.created_at)}</span>
+                </div>
+              </li>
+            {/each}
+          </ol>
+        </section>
       {/each}
-    </ol>
+    </div>
   {/if}
 {/snippet}
 
 <svelte:head>
-  <title>{username} | Softadastra Cloud</title>
+  <title>{publicDisplayName} | Softadastra Cloud</title>
 </svelte:head>
 
 {#if loading}
@@ -187,16 +290,6 @@
   <InlineError message={error} />
 {:else if profile && data}
   <div class="profile-page">
-    <header class="topbar">
-      <div>
-        <p>Softadastra Cloud developer</p>
-        <h1>{profile.display_name || profile.username}</h1>
-      </div>
-      {#if canCustomizePins}
-        <button type="button" class="pin-button" onclick={openPins}>Customize pins</button>
-      {/if}
-    </header>
-
     <nav class="profile-tabs" aria-label="Public profile sections">
       <a class:active={activeTab === 'overview'} href={tabHref('overview')}>Overview</a>
       <a class:active={activeTab === 'packages'} href={tabHref('packages')}>Packages <span>{data.stats.public_packages_count}</span></a>
@@ -210,22 +303,42 @@
         </div>
 
         <div class="profile-name">
-          <h2>{profile.display_name || profile.username}</h2>
-          <p>@{profile.username}</p>
-        </div>
+        <h2>{publicDisplayName}</h2>
+
+        {#if publicUsername}
+          <p>@{publicUsername}</p>
+        {/if}
+      </div>
+
+        <span class="profile-label">Softadastra Cloud builder</span>
 
         {#if profile.bio}<p class="bio">{profile.bio}</p>{/if}
 
-        <div class="profile-links">
-          {#if profile.website_url}<a href={profile.website_url} rel="noreferrer" target="_blank">Website</a>{/if}
-          {#if profile.github_url}<a href={profile.github_url} rel="noreferrer" target="_blank">GitHub</a>{/if}
-        </div>
+       <div class="profile-links">
+    {#if profile.website_url}
+      <a
+        href={profile.website_url}
+        rel="noreferrer"
+        target="_blank"
+      >
+        {profile.website_url}
+      </a>
+    {/if}
 
-        <dl class="profile-stats">
-          <div><dt>Public packages</dt><dd>{data.stats.public_packages_count}</dd></div>
-          <div><dt>Public contributions</dt><dd>{data.stats.public_contributions_count}</dd></div>
-          <div><dt>Pinned packages</dt><dd>{data.stats.pinned_packages_count}</dd></div>
-        </dl>
+    {#if profile.github_url}
+      <a
+        href={profile.github_url}
+        rel="noreferrer"
+        target="_blank"
+      >
+        {profile.github_url}
+      </a>
+    {/if}
+  </div>
+
+        {#if isOwner}
+          <a class="edit-profile" href="/account">Edit public profile</a>
+        {/if}
       </aside>
 
       <main class="profile-main">
@@ -257,38 +370,29 @@
               <h2>Public contributions</h2>
               <span>Public Softadastra Cloud activity, not Git commits.</span>
             </div>
-            <ContributionGrid days={data.contribution_grid} />
+            <ContributionGrid days={data.contribution_grid} year={selectedYear}
+              years={contributionYears} loading={contributionLoading}
+              onYearChange={changeContributionYear} />
           </section>
 
-          <section class="profile-block two-column-block">
-            <div>
-              <div class="block-heading inline-heading">
-                <h2>Recent activity</h2>
-                <a href={tabHref('activity')}>View all</a>
+          {#if data.pinned_packages.length === 0 && packagePreview.length > 0}
+            <section class="profile-block">
+              <div class="block-heading inline-action">
+                <div><h2>Published packages</h2><span>Latest public work from this builder</span></div>
+                <a href={tabHref('packages')}>Explore all</a>
               </div>
-              {@render activityList(activityPreview)}
-            </div>
-            <div>
-              <div class="block-heading inline-heading">
-                <h2>Public packages</h2>
-                <a href={tabHref('packages')}>View all</a>
+              <div class="pinned-grid">
+                {#each packagePreview.slice(0, 4) as packageItem (packageItem.id)}
+                  {@render packageCard(packageItem)}
+                {/each}
               </div>
-              {#if packagePreview.length === 0}
-                <EmptyState title="No public packages" body="This developer has not published public packages yet." />
-              {:else}
-                <div class="compact-package-list">
-                  {#each packagePreview.slice(0, 3) as packageItem (packageItem.id)}
-                    <a href={packageHref(packageItem)}>{packageItem.name}<span>{packageItem.latest_version || 'No version yet'}</span></a>
-                  {/each}
-                </div>
-              {/if}
-            </div>
-          </section>
+            </section>
+          {/if}
         {:else if activeTab === 'packages'}
           <section class="profile-block">
             <div class="block-heading">
               <h2>Public packages</h2>
-              <span>{data.stats.public_packages_count} published publicly</span>
+              <span>Packages shared with the Softadastra ecosystem</span>
             </div>
             {#if data.public_packages.length === 0}
               <EmptyState title="No public packages" body="This developer has not published public packages yet." />
@@ -300,22 +404,16 @@
               </div>
             {/if}
           </section>
-        {:else if activeTab === 'activity'}
-          <section class="profile-block">
-            <div class="block-heading">
-              <h2>Public contributions</h2>
-              <span>Public package and profile events from the last year.</span>
-            </div>
-            <ContributionGrid days={data.contribution_grid} />
-          </section>
-          <section class="profile-block">
-            <div class="block-heading">
-              <h2>Recent public activity</h2>
-              <span>{data.stats.public_contributions_count} public contributions</span>
-            </div>
-            {@render activityList(data.recent_activity)}
-          </section>
-        {/if}
+       {:else if activeTab === 'activity'}
+  <section class="profile-block">
+    <div class="block-heading">
+      <h2>Recent public activity</h2>
+      <span>A readable history of public work</span>
+    </div>
+
+    {@render activityList(data.recent_activity)}
+  </section>
+{/if}
       </main>
     </section>
   </div>
@@ -331,27 +429,41 @@
         <button type="button" class="icon-close" aria-label="Close" onclick={closePins}>x</button>
       </div>
 
-      {#if !$auth.user?.public_profile_enabled}
-        <p class="pin-note">Enable your public profile before customizing pins.</p>
-      {:else if data.public_packages.length === 0}
-        <p class="pin-note">You do not have public packages to pin yet.</p>
-      {:else}
-        <div class="pin-list">
-          {#each data.public_packages as packageItem (packageItem.id)}
-            <label class="pin-row">
-              <input type="checkbox" checked={selectedPinIds.includes(packageItem.id)} onchange={() => togglePin(packageItem.id)} />
-              <span><strong>{packageItem.name}</strong><small>{packageItem.description || 'No description'}</small></span>
-            </label>
-          {/each}
-        </div>
-      {/if}
+      {#if data.public_packages.length === 0}
+    <p class="pin-note">
+      You do not have public packages to pin yet.
+    </p>
+  {:else}
+    <div class="pin-list">
+      {#each data.public_packages as packageItem (packageItem.id)}
+        <label class="pin-row">
+          <input
+            type="checkbox"
+            checked={selectedPinIds.includes(packageItem.id)}
+            onchange={() => togglePin(packageItem.id)}
+          />
+
+          <span>
+            <strong>{packageItem.name}</strong>
+            <small>
+              {packageItem.description || 'No description'}
+            </small>
+          </span>
+        </label>
+      {/each}
+    </div>
+  {/if}
 
       {#if pinError}<InlineError message={pinError} />{/if}
       {#if pinMessage}<p class="pin-success">{pinMessage}</p>{/if}
 
       <div class="modal-actions">
         <button type="button" class="secondary" onclick={closePins}>Cancel</button>
-        <button type="button" onclick={savePins} disabled={savingPins || !$auth.user?.public_profile_enabled}>{savingPins ? 'Saving...' : 'Save pins'}</button>
+        <button
+  type="button"
+  onclick={savePins}
+  disabled={savingPins}
+>{savingPins ? 'Saving...' : 'Save pins'}</button>
       </div>
     </div>
   {/if}
@@ -377,25 +489,48 @@
   .profile-name h2 { color: var(--text); font-size: 24px; line-height: 1.15; overflow-wrap: anywhere; }
   .profile-name p, .bio { color: var(--text-muted); font-size: 14px; line-height: 1.6; }
   .bio { color: var(--text-soft); }
+  .profile-label { width: fit-content; border: 1px solid var(--brand-line); border-radius: 999px; background: var(--brand-faint); color: var(--brand-bright); padding: 5px 9px; font-size: 10.5px; font-weight: 700; letter-spacing: .02em; }
+  .edit-profile { display: grid; min-height: 34px; place-items: center; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg-elevated); color: var(--text-soft); font-size: 11.5px; font-weight: 650; }
+  .edit-profile:hover { border-color: var(--brand-line); color: var(--brand-bright); }
   .profile-links { display: grid; gap: 7px; }
   .profile-links a, .repo-link, .block-heading a, .package-title-row a { color: var(--link); font-weight: 650; }
-  .profile-links a { font-size: 13px; }
-  .profile-stats { display: grid; gap: 8px; margin: 0; border-top: 1px solid var(--line-soft); padding-top: 12px; }
-  .profile-stats div { display: flex; justify-content: space-between; gap: 10px; }
-  .profile-stats dt { color: var(--text-muted); font-size: 12px; }
-  .profile-stats dd { margin: 0; color: var(--text); font-size: 12px; font-weight: 700; }
+.profile-links a {
+  width: fit-content;
+  max-width: 100%;
+  color: var(--link);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.profile-links a:hover {
+  color: var(--link-hover);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
   .profile-main { display: grid; gap: 18px; min-width: 0; }
   .profile-block, .owner-pin-callout { border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--bg-panel); overflow: hidden; }
   .owner-pin-callout { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 15px 16px; }
   .owner-pin-callout h2, .block-heading h2 { color: var(--text); font-size: 15px; }
   .owner-pin-callout p, .block-heading span { color: var(--text-muted); font-size: 12px; }
   .block-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line-soft); padding: 14px 16px; }
+  .block-heading.inline-action > div { display: grid; gap: 3px; }
   .inline-heading { border-bottom: 0; padding: 0 0 12px; }
   .link-button { min-height: auto; border: 0; background: transparent; color: var(--link); padding: 0; font-size: 12px; font-weight: 700; }
   .pinned-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 14px; }
   .package-list { display: grid; gap: 10px; padding: 14px; }
   .package-card { display: grid; gap: 10px; min-width: 0; border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: var(--bg-ink-soft); padding: 13px; }
-  .package-card.pinned { background: var(--brand-faint); border-color: var(--brand-line); }
+.package-card.pinned {
+  background: var(--bg-ink-soft);
+  border-color: var(--line-soft);
+}
+.link-button:hover:not(:disabled) {
+  background: transparent;
+  color: var(--link-hover);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transform: none;
+}
   .package-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
   .package-title-row h3 { font-size: 14px; overflow-wrap: anywhere; }
   .visibility-pill { border: 1px solid var(--line-soft); border-radius: 999px; color: var(--text-muted); padding: 2px 7px; font-size: 10px; }
@@ -404,13 +539,18 @@
   .package-kind { color: var(--brand-bright); font-weight: 700; }
   .repo-link { width: fit-content; font-size: 12px; }
   .two-column-block { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(260px, 0.9fr); gap: 18px; padding: 16px; }
-  .activity-list { display: grid; margin: 0; padding: 0; list-style: none; }
-  .activity-list li { display: grid; grid-template-columns: 12px minmax(0, 1fr); gap: 10px; border-bottom: 1px solid var(--line-soft); padding: 12px 0; }
-  .activity-list li:first-child { padding-top: 0; }
-  .activity-list li:last-child { border-bottom: 0; padding-bottom: 0; }
-  .activity-dot { width: 8px; height: 8px; margin-top: 5px; border-radius: 50%; background: var(--brand-bright); }
-  .activity-list strong { color: var(--text-soft); font-size: 12px; }
-  .activity-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 3px; color: var(--text-muted); font-size: 10.5px; }
+  .activity-timeline { display: grid; padding: 4px 18px 20px; }
+  .activity-group { display: grid; grid-template-columns: 126px minmax(0, 1fr); gap: 18px; padding: 18px 0; border-bottom: 1px solid var(--line-soft); }
+  .activity-group:last-child { border-bottom: 0; }
+  .activity-group h3 { color: var(--text-muted); font-size: 10.5px; font-weight: 650; line-height: 1.5; }
+  .activity-group ol { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+  .activity-group li { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 11px; align-items: center; min-height: 54px; border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: var(--bg-ink-soft); padding: 9px 11px; }
+  .event-icon { display: grid; width: 32px; height: 32px; place-items: center; border: 1px solid var(--brand-line); border-radius: 9px; background: var(--brand-faint); color: var(--brand-bright); font-size: 12px; font-weight: 800; }
+  .event-icon.tag { border-radius: 50%; }
+  .event-icon.profile { color: var(--text-soft); border-color: var(--line); background: var(--bg-elevated); }
+  .event-copy { display: grid; min-width: 0; gap: 4px; }
+  .event-copy strong { color: var(--text-soft); font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+  .event-copy span { color: var(--text-muted); font-size: 10.5px; }
   .compact-package-list { display: grid; gap: 8px; }
   .compact-package-list a { display: flex; justify-content: space-between; gap: 12px; border: 1px solid var(--line-soft); border-radius: var(--radius-sm); color: var(--link); padding: 10px; font-size: 12px; font-weight: 700; }
   .compact-package-list span { color: var(--text-muted); font-weight: 500; }
@@ -429,5 +569,5 @@
   .modal-actions { display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--line-soft); padding: 14px 16px; }
   .secondary { background: transparent; color: var(--text-soft); }
   @media (max-width: 900px) { .public-profile { grid-template-columns: 1fr; } .profile-column { position: static; } .profile-avatar { width: 132px; height: 132px; font-size: 42px; } .two-column-block, .pinned-grid { grid-template-columns: 1fr; } }
-  @media (max-width: 560px) { .topbar, .owner-pin-callout, .modal-actions { align-items: stretch; flex-direction: column; } .profile-tabs { overflow-x: auto; } }
+  @media (max-width: 560px) { .topbar, .owner-pin-callout, .modal-actions { align-items: stretch; flex-direction: column; } .profile-tabs { overflow-x: auto; } .activity-group { grid-template-columns: 1fr; gap: 9px; } }
 </style>

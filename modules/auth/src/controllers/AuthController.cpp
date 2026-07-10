@@ -71,8 +71,7 @@ namespace cloud::auth::controllers
       res.json(
           vix::json::o(
               "ok", true,
-              "data", vix::json::o(
-                  "message", message)));
+              "data", vix::json::o("message", message)));
     }
 
     services::AuthService &auth_service()
@@ -301,12 +300,46 @@ namespace cloud::auth::controllers
       return buffer;
     }
 
+    int utc_year(std::int64_t timestamp)
+    {
+      std::time_t raw = static_cast<std::time_t>(timestamp);
+      std::tm tm{};
+#ifdef _WIN32
+      gmtime_s(&tm, &raw);
+#else
+      gmtime_r(&raw, &tm);
+#endif
+      return tm.tm_year + 1900;
+    }
+
+    bool leap_year(int year)
+    {
+      return year % 400 == 0 || (year % 4 == 0 && year % 100 != 0);
+    }
+
+    std::int64_t utc_year_start(int year)
+    {
+      std::tm tm{};
+      tm.tm_year = year - 1900;
+      tm.tm_mon = 0;
+      tm.tm_mday = 1;
+#ifdef _WIN32
+      return static_cast<std::int64_t>(_mkgmtime(&tm));
+#else
+      return static_cast<std::int64_t>(timegm(&tm));
+#endif
+    }
+
     int contribution_level(std::int64_t count)
     {
-      if (count <= 0) return 0;
-      if (count == 1) return 1;
-      if (count <= 3) return 2;
-      if (count <= 6) return 3;
+      if (count <= 0)
+        return 0;
+      if (count == 1)
+        return 1;
+      if (count <= 3)
+        return 2;
+      if (count <= 6)
+        return 3;
       return 4;
     }
 
@@ -355,9 +388,31 @@ namespace cloud::auth::controllers
       return item;
     }
 
-    bool is_public_profile_visible(bool enabled, const std::string &username)
+    bool looks_like_email(const std::string &value)
     {
-      return enabled && !username.empty();
+      const auto at = value.find('@');
+
+      if (at == std::string::npos ||
+          at == 0 ||
+          at + 1 >= value.size())
+      {
+        return false;
+      }
+
+      const auto dot = value.find('.', at + 1);
+
+      return dot != std::string::npos &&
+             dot > at + 1 &&
+             dot + 1 < value.size();
+    }
+
+    bool is_public_profile_visible(
+        bool enabled,
+        const std::string &username)
+    {
+      return enabled &&
+             !username.empty() &&
+             !looks_like_email(username);
     }
 
     bool is_public_package_visible(const std::string &visibility, bool active)
@@ -389,6 +444,20 @@ namespace cloud::auth::controllers
     void public_profile_show(vix::Request &req, vix::Response &res)
     {
       auto username = req.has_query("username") ? req.query_value("username") : std::string{};
+      auto selected_year = utc_year(now_timestamp());
+
+      if (req.has_query("year"))
+      {
+        try
+        {
+          selected_year = std::stoi(req.query_value("year"));
+        }
+        catch (...)
+        {
+          json_error(res, 400, "contribution_year_invalid", "Contribution year is invalid.");
+          return;
+        }
+      }
 
       if (username.empty() && !req.body().empty())
       {
@@ -398,6 +467,7 @@ namespace cloud::auth::controllers
           if (body.is_object())
           {
             username = body.value("username", "");
+            selected_year = body.value("year", selected_year);
           }
         }
         catch (...)
@@ -408,6 +478,13 @@ namespace cloud::auth::controllers
       if (username.empty())
       {
         json_error(res, 400, "username_required", "Username is required.");
+        return;
+      }
+
+      const auto current_year = utc_year(now_timestamp());
+      if (selected_year < 1970 || selected_year > current_year)
+      {
+        json_error(res, 400, "contribution_year_invalid", "Contribution year is invalid.");
         return;
       }
 
@@ -432,8 +509,14 @@ namespace cloud::auth::controllers
 
         const auto &profile_row = profile_rows->row();
         const auto user_id = profile_row.getString(0);
+        const auto stored_display_name = profile_row.getString(1);
         const auto profile_username = profile_row.getString(2);
         const auto profile_enabled = profile_row.getInt64(7) != 0;
+
+        const auto public_display_name =
+            looks_like_email(stored_display_name)
+                ? profile_username
+                : stored_display_name;
 
         if (!is_public_profile_visible(profile_enabled, profile_username))
         {
@@ -506,13 +589,49 @@ namespace cloud::auth::controllers
             user_id);
         const auto total_contributions = count_rows->next() ? count_rows->row().getInt64(0) : recent_count;
 
+        auto contribution_years = vix::json::Json::array();
+        auto year_rows = db.query(
+            "SELECT DISTINCT CAST(strftime('%Y', created_at, 'unixepoch') AS INTEGER) AS year "
+            "FROM public_activity_events WHERE user_id = ? AND visibility = 'public' "
+            "ORDER BY year DESC",
+            user_id);
+
+        bool selected_year_exists = false;
+        bool current_year_exists = false;
+        while (year_rows->next())
+        {
+          const auto year = static_cast<int>(year_rows->row().getInt64(0));
+          contribution_years.push_back(year);
+          selected_year_exists = selected_year_exists || year == selected_year;
+          current_year_exists = current_year_exists || year == current_year;
+        }
+
+        if (contribution_years.empty())
+        {
+          contribution_years.push_back(current_year);
+        }
+        else if (!selected_year_exists && selected_year == current_year && !current_year_exists)
+        {
+          auto years_with_current = vix::json::Json::array();
+          years_with_current.push_back(current_year);
+          for (const auto &year : contribution_years)
+          {
+            years_with_current.push_back(year);
+          }
+          contribution_years = years_with_current;
+        }
+
         std::unordered_map<std::string, std::int64_t> counts_by_date;
+        const auto year_start = utc_year_start(selected_year);
+        const auto next_year_start = utc_year_start(selected_year + 1);
         auto grid_rows = db.query(
             "SELECT strftime('%Y-%m-%d', created_at, 'unixepoch') AS day, COUNT(*) "
             "FROM public_activity_events "
-            "WHERE user_id = ? AND visibility = 'public' AND created_at >= strftime('%s','now','-364 days') "
+            "WHERE user_id = ? AND visibility = 'public' AND created_at >= ? AND created_at < ? "
             "GROUP BY day",
-            user_id);
+            user_id,
+            year_start,
+            next_year_start);
 
         while (grid_rows->next())
         {
@@ -520,10 +639,10 @@ namespace cloud::auth::controllers
         }
 
         auto contribution_grid = vix::json::Json::array();
-        const auto today = now_timestamp();
-        for (int day = 364; day >= 0; --day)
+        const auto number_of_days = leap_year(selected_year) ? 366 : 365;
+        for (int day = 0; day < number_of_days; ++day)
         {
-          const auto timestamp = today - static_cast<std::int64_t>(day) * 86400;
+          const auto timestamp = year_start + static_cast<std::int64_t>(day) * 86400;
           const auto date = utc_date(timestamp);
           const auto item = counts_by_date.find(date);
           const auto count = item == counts_by_date.end() ? static_cast<std::int64_t>(0) : item->second;
@@ -536,23 +655,15 @@ namespace cloud::auth::controllers
         }
 
         json_ok(res, vix::json::o(
-            "profile", vix::json::o(
-                "display_name", profile_row.getString(1),
-                "username", profile_username,
-                "bio", profile_row.getString(3),
-                "avatar_url", profile_row.getString(4),
-                "website_url", profile_row.getString(5),
-                "github_url", profile_row.getString(6),
-                "public_profile_enabled", profile_enabled),
-            "pinned_packages", pinned_packages,
-            "public_packages", packages,
-            "contribution_grid", contribution_grid,
-            "recent_activity", recent_activity,
-            "public_activity", recent_activity,
-            "stats", vix::json::o(
-                "public_packages_count", static_cast<std::int64_t>(packages.size()),
-                "public_contributions_count", total_contributions,
-                "pinned_packages_count", static_cast<std::int64_t>(pinned_packages.size()))));
+                         "profile", vix::json::o("display_name", public_display_name, "username", profile_username, "bio", profile_row.getString(3), "avatar_url", profile_row.getString(4), "website_url", profile_row.getString(5), "github_url", profile_row.getString(6), "public_profile_enabled", profile_enabled),
+                         "pinned_packages", pinned_packages,
+                         "public_packages", packages,
+                         "contribution_grid", contribution_grid,
+                         "contribution_years", contribution_years,
+                         "selected_contribution_year", selected_year,
+                         "recent_activity", recent_activity,
+                         "public_activity", recent_activity,
+                         "stats", vix::json::o("public_packages_count", static_cast<std::int64_t>(packages.size()), "public_contributions_count", total_contributions, "pinned_packages_count", static_cast<std::int64_t>(pinned_packages.size()))));
       }
       catch (...)
       {
