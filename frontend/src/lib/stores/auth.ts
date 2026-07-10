@@ -110,6 +110,24 @@ function createAuthStore() {
         return 'unreachable' as const;
       }
     },
+    async ensureAuthLoaded() {
+      let current: AuthState = initialState;
+
+      store.update((state) => {
+        current = state;
+        return state;
+      });
+
+      if (!current.session?.id) {
+        return 'missing' as const;
+      }
+
+      if (current.user && !current.sessionExpired) {
+        return 'ready' as const;
+      }
+
+      return this.refreshCurrentUser();
+    },
     setUser(user: User) {
       store.update((state) => {
         const next = { ...state, user, sessionExpired: false, authError: '' };

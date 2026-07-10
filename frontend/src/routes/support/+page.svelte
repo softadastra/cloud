@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import InlineError from '$lib/components/InlineError.svelte';
+  import PublicHeader from '$lib/components/PublicHeader.svelte';
   import { getSupportConfig } from '$lib/api/support';
   import { ApiError } from '$lib/api/types';
   import type { SupportConfig } from '$lib/api/types';
@@ -32,10 +33,7 @@
 </svelte:head>
 
 <main class="support-page">
-  <nav class="public-nav" aria-label="Public navigation">
-    <a class="brand" href="/"><img src="/brand/softadastra-cloud.svg" alt="" /><span>Softadastra Cloud</span></a>
-    <div><a href="/supporters">Supporters</a><a href="/login">Sign in</a></div>
-  </nav>
+  <PublicHeader showPlatform={false} />
 
   <InlineError message={error} />
 
@@ -103,10 +101,6 @@
 
 <style>
   .support-page { min-height: 100vh; background: var(--bg); color: var(--text); padding: 24px; }
-  .public-nav { display: flex; align-items: center; justify-content: space-between; gap: 16px; max-width: 1120px; margin: 0 auto 44px; }
-  .brand, .public-nav div { display: flex; align-items: center; gap: 12px; }
-  .brand img { width: 28px; height: 28px; } .brand span { color: var(--text); font-weight: 800; }
-  .public-nav a { color: var(--text-soft); font-size: 13px; font-weight: 650; }
   .hero, .content-section, .plans, .content-grid { max-width: 1120px; margin: 0 auto; }
   .hero { padding: 42px 0 34px; }
   .eyebrow, .plans span { color: var(--brand-bright); font-size: 11px; font-weight: 800; text-transform: uppercase; }
@@ -126,5 +120,5 @@
   .plans ul { display: grid; gap: 8px; margin: 16px 0 20px; padding-left: 18px; }
   .builder-plan { border-color: rgba(245, 158, 11, 0.34) !important; }
   .content-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 16px; padding-bottom: 48px; }
-  @media (max-width: 760px) { .support-page { padding: 18px; } .plans, .content-grid { grid-template-columns: 1fr; } .public-nav { align-items: flex-start; flex-direction: column; } }
+  @media (max-width: 760px) { .support-page { padding: 18px; } .plans, .content-grid { grid-template-columns: 1fr; } }
 </style>

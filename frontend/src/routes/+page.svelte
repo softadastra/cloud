@@ -1,5 +1,17 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { auth } from '$lib/stores/auth';
+  import PublicHeader from '$lib/components/PublicHeader.svelte';
+
+  let checkingAuth = true;
+
+  onMount(async () => {
+    try {
+      await auth.ensureAuthLoaded();
+    } finally {
+      checkingAuth = false;
+    }
+  });
 
   const features = [
     {
@@ -46,24 +58,7 @@
 </svelte:head>
 
 <main class="home-page">
-  <nav class="public-nav" aria-label="Public navigation">
-    <a class="brand" href="/">
-      <img src="/brand/softadastra-cloud.svg" alt="" />
-      <span>Softadastra Cloud</span>
-    </a>
-
-    <div class="nav-links">
-      <a href="#platform">Platform</a>
-      <a href="/support">Support</a>
-      <a href="/supporters">Supporters</a>
-      {#if $auth.session}
-        <a class="nav-cta" href="/dashboard">Open dashboard</a>
-      {:else}
-        <a href="/login">Sign in</a>
-        <a class="nav-cta" href="/register">Create account</a>
-      {/if}
-    </div>
-  </nav>
+  <PublicHeader />
 
   <section class="hero">
     <p class="eyebrow">Softadastra Cloud</p>
@@ -73,7 +68,9 @@
       workspaces, lockfiles, build reports, permissions and project activity around Vix.
     </p>
     <div class="hero-actions">
-      {#if $auth.session}
+      {#if checkingAuth}
+        <span class="cta-placeholder" aria-hidden="true"></span>
+      {:else if $auth.session}
         <a class="primary-action" href="/dashboard">Open dashboard</a>
       {:else}
         <a class="primary-action" href="/register">Create account</a>
@@ -180,7 +177,6 @@
     padding: 24px;
   }
 
-  .public-nav,
   .hero,
   .split-section,
   .feature-grid,
@@ -192,16 +188,6 @@
     margin: 0 auto;
   }
 
-  .public-nav {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    margin-bottom: 52px;
-  }
-
-  .brand,
-  .nav-links,
   .home-footer nav {
     display: flex;
     align-items: center;
@@ -209,12 +195,6 @@
     flex-wrap: wrap;
   }
 
-  .brand img {
-    width: 28px;
-    height: 28px;
-  }
-
-  .brand span,
   .home-footer span {
     color: var(--text);
     font-weight: 800;
@@ -230,7 +210,6 @@
     color: var(--link-hover);
   }
 
-  .nav-cta,
   .primary-action,
   .secondary-action,
   .support-plans a {
@@ -286,6 +265,12 @@
     border-color: var(--line-strong);
     background: var(--bg-panel);
     color: var(--text-soft);
+  }
+
+  .cta-placeholder {
+    display: inline-block;
+    width: 132px;
+    height: 38px;
   }
 
   .split-section,
@@ -406,7 +391,6 @@
       padding: 18px;
     }
 
-    .public-nav,
     .home-footer {
       align-items: flex-start;
       flex-direction: column;

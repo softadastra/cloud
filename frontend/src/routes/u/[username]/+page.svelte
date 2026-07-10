@@ -6,6 +6,7 @@
   import EmptyState from '$lib/components/EmptyState.svelte';
   import InlineError from '$lib/components/InlineError.svelte';
   import SupporterBadge from '$lib/components/SupporterBadge.svelte';
+  import PublicHeader from '$lib/components/PublicHeader.svelte';
   import { updateProfilePins } from '$lib/api/profilePins';
   import { getPublicProfile } from '$lib/api/publicProfiles';
   import { ApiError } from '$lib/api/types';

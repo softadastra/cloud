@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import InlineError from '$lib/components/InlineError.svelte';
   import SupporterBadge from '$lib/components/SupporterBadge.svelte';
+  import PublicHeader from '$lib/components/PublicHeader.svelte';
   import { listPublicSupporters } from '$lib/api/support';
   import { ApiError } from '$lib/api/types';
   import type { PublicSupporter } from '$lib/api/types';
@@ -30,10 +31,7 @@
 <svelte:head><title>Supporters | Softadastra Cloud</title></svelte:head>
 
 <main class="supporters-page">
-  <nav class="public-nav" aria-label="Public navigation">
-    <a class="brand" href="/"><img src="/brand/softadastra-cloud.svg" alt="" /><span>Softadastra Cloud</span></a>
-    <div><a href="/support">Support the project</a><a href="/login">Sign in</a></div>
-  </nav>
+  <PublicHeader showPlatform={false} />
 
   <header class="hero">
     <p>Founding Supporters</p>
@@ -68,11 +66,8 @@
 
 <style>
   .supporters-page { min-height: 100vh; background: var(--bg); color: var(--text); padding: 24px; }
-  .public-nav, .hero, .supporter-grid, .empty { max-width: 1120px; margin-left: auto; margin-right: auto; }
-  .public-nav { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 44px; }
-  .brand, .public-nav div { display: flex; align-items: center; gap: 12px; }
-  .brand img { width: 28px; height: 28px; } .brand span { color: var(--text); font-weight: 800; }
-  .public-nav a, .links a { color: var(--link); font-size: 13px; font-weight: 650; }
+  .hero, .supporter-grid, .empty { max-width: 1120px; margin-left: auto; margin-right: auto; }
+  .links a { color: var(--link); font-size: 13px; font-weight: 650; }
   .hero { border-bottom: 1px solid var(--line); padding-bottom: 24px; }
   .hero p { color: var(--brand-bright); font-size: 11px; font-weight: 800; text-transform: uppercase; }
   .hero h1 { margin-top: 8px; color: var(--text); font-size: clamp(30px, 5vw, 52px); }
@@ -83,5 +78,5 @@
   .supporter-grid h2 { margin-top: 12px; color: var(--text); font-size: 17px; }
   .supporter-grid p, .supporter-grid time, .empty { color: var(--text-muted); font-size: 13px; line-height: 1.6; }
   .links { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0; }
-  @media (max-width: 860px) { .supporter-grid { grid-template-columns: 1fr; } .public-nav { align-items: flex-start; flex-direction: column; } }
+  @media (max-width: 860px) { .supporter-grid { grid-template-columns: 1fr; } }
 </style>
