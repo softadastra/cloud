@@ -10,6 +10,8 @@
 #include <vix.hpp>
 #include <vix/log.hpp>
 #include <vix/middleware.hpp>
+#include <vix/middleware/app/adapter.hpp>
+#include <vix/middleware/security/cors.hpp>
 
 namespace cloud::presentation::middleware
 {
@@ -19,18 +21,26 @@ namespace cloud::presentation::middleware
     // CORS -> rate limit -> request logging -> security headers -> body limits -> auth -> routes.
 
     // CORS for local dashboard development.
-    app.use([](vix::Request &req, vix::Response &res, vix::App::Next next)
-    {
-      (void)req;
-
-      res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Session-Id, X-Access-Token, X-Requested-With, Accept, Origin");
-      next();
-    });
-
-    app.use(vix::middleware::app::cors_dev({
+    vix::middleware::security::CorsOptions cors_options{};
+    cors_options.allowed_origins = {
       "http://localhost:5173",
-      "http://127.0.0.1:5173"
-    }));
+      "http://127.0.0.1:5173",
+      "http://192.168.1.6:5173"
+    };
+    cors_options.allow_credentials = true;
+    cors_options.allow_methods = {"GET", "POST", "OPTIONS"};
+    cors_options.allow_headers = {
+      "Content-Type",
+      "Authorization",
+      "X-Session-Id",
+      "X-Access-Token",
+      "X-Requested-With",
+      "Accept",
+      "Origin"
+    };
+    cors_options.expose_headers = {"X-Request-Id"};
+
+    app.use(vix::middleware::app::adapt_ctx(vix::middleware::security::cors(std::move(cors_options))));
 
     // Security headers.
     app.use(vix::middleware::app::security_headers_dev(false));

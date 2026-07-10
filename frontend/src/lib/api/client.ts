@@ -7,7 +7,7 @@ export type ApiClientOptions = {
   authHeader?: 'authorization' | 'x-session-id' | 'both';
 };
 
-const DEFAULT_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV ? 'http://localhost:8080' : '');
+const DEFAULT_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV && browser ? `${window.location.protocol}//${window.location.hostname}:8080` : '');
 const AUTH_STORAGE_KEY = 'softadastra.cloud.auth';
 
 function isApiFailure(value: unknown): value is ApiFailure {
@@ -89,7 +89,17 @@ export class ApiClient {
       }
     }
 
-    const response = await fetch(`${this.baseUrl}${path}`, init);
+    let response: Response;
+
+    try {
+      response = await fetch(`${this.baseUrl}${path}`, init);
+    } catch {
+      throw new ApiError(
+        0,
+        'network_error',
+        'Unable to reach the API. Check that the backend is running and that VITE_API_BASE_URL is correct.'
+      );
+    }
     const text = await response.text();
     let payload: ApiResponse<T> | null = null;
 
@@ -103,7 +113,11 @@ export class ApiClient {
       const failure = isApiFailure(payload)
         ? payload
         : { ok: false as const, error: 'http_error', message: `HTTP ${response.status}` };
-      throw new ApiError(response.status, failure.error, failure.message);
+      throw new ApiError(
+        response.status,
+        failure.error,
+        response.status === 401 ? 'Session expired. Please log in again.' : failure.message
+      );
     }
 
     if (!payload || payload.ok !== true || !('data' in payload)) {
@@ -114,4 +128,4 @@ export class ApiClient {
   }
 }
 
-export const api = new ApiClient({ authHeader: 'authorization' });
+export const api = new ApiClient({ authHeader: 'both' });

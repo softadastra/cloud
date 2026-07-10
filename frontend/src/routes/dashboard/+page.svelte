@@ -138,9 +138,7 @@
     }
   }
 
-  onMount(async () => {
-    await Promise.all([load(), notifications.loadNotifications()]);
-  });
+  onMount(load);
 </script>
 
 <svelte:head>

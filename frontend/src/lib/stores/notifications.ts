@@ -1,7 +1,8 @@
 import { browser } from '$app/environment';
-import { derived, writable } from 'svelte/store';
+import { derived, get, writable } from 'svelte/store';
+import { auth } from '$lib/stores/auth';
 import { listNotifications, markAllNotificationsRead, markNotificationRead, unreadNotificationCount } from '$lib/api/notifications';
-import type { NotificationItem } from '$lib/api/types';
+import { ApiError, type NotificationItem } from '$lib/api/types';
 
 export type NotificationsState = {
   notifications: NotificationItem[];
@@ -24,11 +25,21 @@ function createNotificationsStore() {
   let socket: WebSocket | null = null;
 
   async function loadNotifications(filter: 'all' | 'unread' | 'read' = 'all') {
+    if (!get(auth).session) {
+      store.update((state) => ({ ...state, loading: false, error: '' }));
+      return;
+    }
+
     store.update((state) => ({ ...state, loading: true, error: '' }));
     try {
       const [list, count] = await Promise.all([listNotifications({ filter, limit: 50 }), unreadNotificationCount()]);
       store.update((state) => ({ ...state, notifications: list.notifications, unreadCount: count.unread_count, loading: false }));
     } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        store.update((state) => ({ ...state, loading: false, error: '' }));
+        return;
+      }
+
       store.update((state) => ({ ...state, loading: false, error: error instanceof Error ? error.message : 'Unable to load notifications.' }));
     }
   }

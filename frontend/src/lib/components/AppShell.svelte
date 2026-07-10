@@ -4,7 +4,6 @@
   import RoleBadge from '$lib/components/RoleBadge.svelte';
   import { auth } from '$lib/stores/auth';
   import { notifications } from '$lib/stores/notifications';
-  import { onMount } from 'svelte';
   import { workspaceContext } from '$lib/stores/workspace';
 
   const navItems = [
@@ -17,21 +16,21 @@
     { href: '/build-reports', label: 'Build reports' },
     { href: '/tokens', label: 'Tokens' },
     { href: '/members', label: 'Members' },
-    { href: '/notifications', label: 'Notifications' },
     { href: '/feedback', label: 'Feedback' }
   ];
 
+  let initializedSessionId = '';
+
   $: initial = ($auth.user?.name || $auth.user?.email || 'U').slice(0, 1).toUpperCase();
-  $: if ($auth.session) {
+  $: if ($auth.session?.id && initializedSessionId !== $auth.session.id) {
+    initializedSessionId = $auth.session.id;
+    notifications.loadNotifications();
     notifications.connectRealtime($auth.session.id);
   }
-
-  onMount(() => {
-    if ($auth.session) {
-      notifications.loadNotifications();
-      notifications.connectRealtime($auth.session.id);
-    }
-  });
+  $: if (!$auth.session && initializedSessionId) {
+    initializedSessionId = '';
+    notifications.clear();
+  }
 
   function logout() {
     auth.clear();
