@@ -112,6 +112,8 @@
   ] as const;
 
   let initializedSessionId = '';
+  let verifiedSessionId = '';
+  let verifyingSession = false;
 
   let sidebarOpen = false;
   let sidebarCollapsed = false;
@@ -161,6 +163,25 @@
 
   $: if (
     $auth.session?.id &&
+    verifiedSessionId !== $auth.session.id &&
+    !verifyingSession
+  ) {
+    verifyingSession = true;
+    const sessionId = $auth.session.id;
+
+    auth.refreshCurrentUser().then((ok) => {
+      verifyingSession = false;
+
+      if (ok) {
+        verifiedSessionId = sessionId;
+      } else if (currentPath !== '/login' && !currentPath.startsWith('/u/')) {
+        void goto('/login');
+      }
+    });
+  }
+
+  $: if (
+    $auth.session?.id &&
     initializedSessionId !== $auth.session.id
   ) {
     initializedSessionId = $auth.session.id;
@@ -171,6 +192,7 @@
 
   $: if (!$auth.session && initializedSessionId) {
     initializedSessionId = '';
+    verifiedSessionId = '';
     notifications.clear();
   }
 

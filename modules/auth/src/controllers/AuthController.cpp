@@ -15,16 +15,24 @@
 #include <auth/controllers/AuthController.hpp>
 
 #include <auth/dto/AuthRequests.hpp>
+#include <auth/middleware/AuthMiddleware.hpp>
 #include <auth/services/AuthService.hpp>
 
 #include <rix/auth/AuthError.hpp>
 #include <auth/support/AuthErrors.hpp>
 
+#include <algorithm>
+#include <chrono>
 #include <cctype>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <memory>
+#include <sstream>
 #include <string>
+#include <unordered_map>
+#include <vector>
 #include <vix.hpp>
 #include <vix/config/Config.hpp>
 #include <vix/db/db.hpp>
@@ -265,6 +273,88 @@ namespace cloud::auth::controllers
       return {};
     }
 
+    std::int64_t now_timestamp()
+    {
+      return std::chrono::duration_cast<std::chrono::seconds>(
+                 std::chrono::system_clock::now().time_since_epoch())
+          .count();
+    }
+
+    std::string make_public_id(const std::string &prefix, std::int64_t suffix = 0)
+    {
+      std::ostringstream out;
+      out << prefix << "_" << now_timestamp() << "_" << suffix;
+      return out.str();
+    }
+
+    std::string utc_date(std::int64_t timestamp)
+    {
+      std::time_t raw = static_cast<std::time_t>(timestamp);
+      std::tm tm{};
+#ifdef _WIN32
+      gmtime_s(&tm, &raw);
+#else
+      gmtime_r(&raw, &tm);
+#endif
+      char buffer[16]{};
+      std::strftime(buffer, sizeof(buffer), "%Y-%m-%d", &tm);
+      return buffer;
+    }
+
+    int contribution_level(std::int64_t count)
+    {
+      if (count <= 0) return 0;
+      if (count == 1) return 1;
+      if (count <= 3) return 2;
+      if (count <= 6) return 3;
+      return 4;
+    }
+
+    void ensure_public_profile_pins_table(vix::db::Database &db)
+    {
+      db.exec(
+          "CREATE TABLE IF NOT EXISTS public_profile_pins ("
+          "id TEXT PRIMARY KEY, "
+          "user_id TEXT NOT NULL, "
+          "package_id TEXT NOT NULL, "
+          "sort_order INTEGER NOT NULL DEFAULT 0, "
+          "created_at INTEGER NOT NULL, "
+          "updated_at INTEGER NOT NULL, "
+          "UNIQUE(user_id, package_id))");
+    }
+
+    vix::json::Json public_package_json(
+        vix::db::Database &db,
+        const vix::db::ResultRow &row)
+    {
+      auto version_rows = db.query(
+          "SELECT COUNT(*), COALESCE((SELECT version FROM package_versions WHERE package_id = ? ORDER BY created_at DESC LIMIT 1), '') "
+          "FROM package_versions WHERE package_id = ?",
+          row.getString(0),
+          row.getString(0));
+
+      std::int64_t versions_count = 0;
+      std::string latest_version;
+      if (version_rows->next())
+      {
+        versions_count = version_rows->row().getInt64(0);
+        latest_version = version_rows->row().getString(1);
+      }
+
+      auto item = vix::json::Json::object();
+      item["id"] = row.getString(0);
+      item["name"] = row.getString(1);
+      item["description"] = row.getString(2);
+      item["repository_url"] = row.getString(3);
+      item["visibility"] = row.getString(4);
+      item["created_at"] = row.getInt64(6);
+      item["updated_at"] = row.getInt64(7);
+      item["latest_version"] = latest_version;
+      item["versions_count"] = versions_count;
+      item["package_type"] = "Vix package";
+      return item;
+    }
+
     bool is_public_profile_visible(bool enabled, const std::string &username)
     {
       return enabled && !username.empty();
@@ -298,7 +388,22 @@ namespace cloud::auth::controllers
 
     void public_profile_show(vix::Request &req, vix::Response &res)
     {
-      const auto username = req.has_query("username") ? req.query_value("username") : std::string{};
+      auto username = req.has_query("username") ? req.query_value("username") : std::string{};
+
+      if (username.empty() && !req.body().empty())
+      {
+        try
+        {
+          const auto &body = req.json();
+          if (body.is_object())
+          {
+            username = body.value("username", "");
+          }
+        }
+        catch (...)
+        {
+        }
+      }
 
       if (username.empty())
       {
@@ -311,6 +416,7 @@ namespace cloud::auth::controllers
         vix::config::Config cfg{".env"};
         vix::db::Database db{cfg};
         ensure_public_activity_table(db);
+        ensure_public_profile_pins_table(db);
 
         auto profile_rows = db.query(
             "SELECT user_id, COALESCE(display_name, ''), COALESCE(username, ''), COALESCE(bio, ''), "
@@ -335,6 +441,25 @@ namespace cloud::auth::controllers
           return;
         }
 
+        auto pinned_packages = vix::json::Json::array();
+        auto pinned_rows = db.query(
+            "SELECT p.id, p.name, COALESCE(p.description, ''), COALESCE(p.repository_url, ''), p.visibility, p.active, p.created_at, p.updated_at "
+            "FROM public_profile_pins pin "
+            "JOIN packages p ON p.id = pin.package_id "
+            "WHERE pin.user_id = ? AND p.owner_user_id = ? AND p.visibility = 'public' AND p.active = 1 "
+            "ORDER BY pin.sort_order ASC, pin.created_at ASC LIMIT 6",
+            user_id,
+            user_id);
+
+        while (pinned_rows->next())
+        {
+          const auto &row = pinned_rows->row();
+          if (is_public_package_visible(row.getString(4), row.getInt64(5) != 0))
+          {
+            pinned_packages.push_back(public_package_json(db, row));
+          }
+        }
+
         auto packages = vix::json::Json::array();
         auto package_rows = db.query(
             "SELECT id, name, COALESCE(description, ''), COALESCE(repository_url, ''), visibility, active, created_at, updated_at "
@@ -344,29 +469,19 @@ namespace cloud::auth::controllers
         while (package_rows->next())
         {
           const auto &row = package_rows->row();
-          if (!is_public_package_visible(row.getString(4), row.getInt64(5) != 0))
+          if (is_public_package_visible(row.getString(4), row.getInt64(5) != 0))
           {
-            continue;
+            packages.push_back(public_package_json(db, row));
           }
-
-          auto package_json = vix::json::Json::object();
-          package_json["id"] = row.getString(0);
-          package_json["name"] = row.getString(1);
-          package_json["description"] = row.getString(2);
-          package_json["repository_url"] = row.getString(3);
-          package_json["visibility"] = row.getString(4);
-          package_json["created_at"] = row.getInt64(6);
-          package_json["updated_at"] = row.getInt64(7);
-          packages.push_back(package_json);
         }
 
-        auto activity = vix::json::Json::array();
+        auto recent_activity = vix::json::Json::array();
         auto activity_rows = db.query(
             "SELECT id, COALESCE(package_id, ''), type, title, COALESCE(data_json, '{}'), visibility, created_at "
             "FROM public_activity_events WHERE user_id = ? AND visibility = 'public' ORDER BY created_at DESC LIMIT 30",
             user_id);
 
-        std::int64_t contribution_count = 0;
+        std::int64_t recent_count = 0;
         while (activity_rows->next())
         {
           const auto &row = activity_rows->row();
@@ -375,7 +490,7 @@ namespace cloud::auth::controllers
             continue;
           }
 
-          contribution_count += 1;
+          recent_count += 1;
           auto activity_json = vix::json::Json::object();
           activity_json["id"] = row.getString(0);
           activity_json["package_id"] = row.getString(1);
@@ -383,7 +498,41 @@ namespace cloud::auth::controllers
           activity_json["title"] = row.getString(3);
           activity_json["data_json"] = row.getString(4);
           activity_json["created_at"] = row.getInt64(6);
-          activity.push_back(activity_json);
+          recent_activity.push_back(activity_json);
+        }
+
+        auto count_rows = db.query(
+            "SELECT COUNT(*) FROM public_activity_events WHERE user_id = ? AND visibility = 'public'",
+            user_id);
+        const auto total_contributions = count_rows->next() ? count_rows->row().getInt64(0) : recent_count;
+
+        std::unordered_map<std::string, std::int64_t> counts_by_date;
+        auto grid_rows = db.query(
+            "SELECT strftime('%Y-%m-%d', created_at, 'unixepoch') AS day, COUNT(*) "
+            "FROM public_activity_events "
+            "WHERE user_id = ? AND visibility = 'public' AND created_at >= strftime('%s','now','-364 days') "
+            "GROUP BY day",
+            user_id);
+
+        while (grid_rows->next())
+        {
+          counts_by_date[grid_rows->row().getString(0)] = grid_rows->row().getInt64(1);
+        }
+
+        auto contribution_grid = vix::json::Json::array();
+        const auto today = now_timestamp();
+        for (int day = 364; day >= 0; --day)
+        {
+          const auto timestamp = today - static_cast<std::int64_t>(day) * 86400;
+          const auto date = utc_date(timestamp);
+          const auto item = counts_by_date.find(date);
+          const auto count = item == counts_by_date.end() ? static_cast<std::int64_t>(0) : item->second;
+
+          auto cell = vix::json::Json::object();
+          cell["date"] = date;
+          cell["count"] = count;
+          cell["level"] = contribution_level(count);
+          contribution_grid.push_back(cell);
         }
 
         json_ok(res, vix::json::o(
@@ -395,15 +544,183 @@ namespace cloud::auth::controllers
                 "website_url", profile_row.getString(5),
                 "github_url", profile_row.getString(6),
                 "public_profile_enabled", profile_enabled),
+            "pinned_packages", pinned_packages,
             "public_packages", packages,
-            "public_activity", activity,
+            "contribution_grid", contribution_grid,
+            "recent_activity", recent_activity,
+            "public_activity", recent_activity,
             "stats", vix::json::o(
                 "public_packages_count", static_cast<std::int64_t>(packages.size()),
-                "public_contributions_count", contribution_count)));
+                "public_contributions_count", total_contributions,
+                "pinned_packages_count", static_cast<std::int64_t>(pinned_packages.size()))));
       }
       catch (...)
       {
         json_error(res, 500, "public_profile_error", "Could not load public profile.");
+      }
+    }
+
+    std::string current_user_id(vix::Request &req)
+    {
+      try
+      {
+        return req.state<cloud::auth::middleware::AuthContext>().user_id;
+      }
+      catch (...)
+      {
+        return {};
+      }
+    }
+
+    void profile_pins_list(vix::Request &req, vix::Response &res)
+    {
+      const auto user_id = current_user_id(req);
+      if (user_id.empty())
+      {
+        json_error(res, 401, "unauthenticated", "Authentication is required.");
+        return;
+      }
+
+      try
+      {
+        vix::config::Config cfg{".env"};
+        vix::db::Database db{cfg};
+        ensure_public_profile_pins_table(db);
+
+        auto pins = vix::json::Json::array();
+        auto ids = vix::json::Json::array();
+        auto rows = db.query(
+            "SELECT p.id, p.name, COALESCE(p.description, ''), COALESCE(p.repository_url, ''), p.visibility, p.active, p.created_at, p.updated_at "
+            "FROM public_profile_pins pin JOIN packages p ON p.id = pin.package_id "
+            "WHERE pin.user_id = ? AND p.owner_user_id = ? AND p.visibility = 'public' AND p.active = 1 "
+            "ORDER BY pin.sort_order ASC, pin.created_at ASC",
+            user_id,
+            user_id);
+
+        while (rows->next())
+        {
+          const auto &row = rows->row();
+          ids.push_back(row.getString(0));
+          pins.push_back(public_package_json(db, row));
+        }
+
+        json_ok(res, vix::json::o("package_ids", ids, "pinned_packages", pins));
+      }
+      catch (...)
+      {
+        json_error(res, 500, "profile_pins_error", "Could not load profile pins.");
+      }
+    }
+
+    bool validate_public_pin_package(
+        vix::db::Database &db,
+        const std::string &user_id,
+        const std::string &package_id,
+        vix::Response &res)
+    {
+      auto rows = db.query(
+          "SELECT owner_user_id, visibility, active FROM packages WHERE id = ? LIMIT 1",
+          package_id);
+
+      if (!rows->next())
+      {
+        json_error(res, 404, "package_not_found", "Package was not found.");
+        return false;
+      }
+
+      const auto &row = rows->row();
+      if (row.getString(0) != user_id)
+      {
+        json_error(res, 403, "package_not_owned_by_user", "You can only pin your own packages.");
+        return false;
+      }
+
+      if (row.getString(1) != "public")
+      {
+        json_error(res, 400, "package_not_public", "Only public packages can be pinned.");
+        return false;
+      }
+
+      if (row.getInt64(2) == 0)
+      {
+        json_error(res, 404, "package_not_found", "Package was not found.");
+        return false;
+      }
+
+      return true;
+    }
+
+    void profile_pins_update(vix::Request &req, vix::Response &res)
+    {
+      const auto user_id = current_user_id(req);
+      if (user_id.empty())
+      {
+        json_error(res, 401, "unauthenticated", "Authentication is required.");
+        return;
+      }
+
+      const auto &body = req.json();
+      if (!body.is_object() || !body.contains("package_ids") || !body["package_ids"].is_array())
+      {
+        json_error(res, 400, "invalid_request", "package_ids must be an array.");
+        return;
+      }
+
+      std::vector<std::string> package_ids;
+      for (const auto &item : body["package_ids"])
+      {
+        if (!item.is_string())
+        {
+          json_error(res, 400, "invalid_request", "package_ids must contain strings.");
+          return;
+        }
+        const auto id = item.get<std::string>();
+        if (std::find(package_ids.begin(), package_ids.end(), id) == package_ids.end())
+        {
+          package_ids.push_back(id);
+        }
+      }
+
+      if (package_ids.size() > 6)
+      {
+        json_error(res, 400, "too_many_pins", "You can pin up to 6 public packages.");
+        return;
+      }
+
+      try
+      {
+        vix::config::Config cfg{".env"};
+        vix::db::Database db{cfg};
+        ensure_public_profile_pins_table(db);
+
+        for (const auto &package_id : package_ids)
+        {
+          if (!validate_public_pin_package(db, user_id, package_id, res))
+          {
+            return;
+          }
+        }
+
+        db.exec("DELETE FROM public_profile_pins WHERE user_id = ?", user_id);
+
+        const auto now = now_timestamp();
+        for (std::size_t index = 0; index < package_ids.size(); ++index)
+        {
+          db.exec(
+              "INSERT INTO public_profile_pins (id, user_id, package_id, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+              make_public_id("pin", static_cast<std::int64_t>(index)),
+              user_id,
+              package_ids[index],
+              static_cast<std::int64_t>(index),
+              now,
+              now);
+        }
+
+        profile_pins_list(req, res);
+      }
+      catch (...)
+      {
+        json_error(res, 500, "profile_pins_error", "Could not update profile pins.");
       }
     }
 
@@ -728,6 +1045,12 @@ namespace cloud::auth::controllers
       }
 
       json_ok(res, vix::json::o("message", "Avatar removed.")); });
+
+    app.post("/api/profile/pins/list", [](vix::Request &req, vix::Response &res)
+             { profile_pins_list(req, res); });
+
+    app.post("/api/profile/pins/update", [](vix::Request &req, vix::Response &res)
+             { profile_pins_update(req, res); });
 
     app.post("/api/public/users/show", [](vix::Request &req, vix::Response &res)
              { public_profile_show(req, res); });

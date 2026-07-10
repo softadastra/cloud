@@ -69,6 +69,9 @@ export type PublicPackageSummary = {
   visibility: 'public' | string;
   created_at: number;
   updated_at: number;
+  latest_version?: string;
+  versions_count?: number;
+  package_type?: string;
 };
 
 export type PublicActivityEvent = {
@@ -80,14 +83,31 @@ export type PublicActivityEvent = {
   created_at: number;
 };
 
+export type ContributionGridDay = {
+  date: string;
+  count: number;
+  level: number;
+};
+
+export type PublicProfileStats = {
+  public_packages_count: number;
+  public_contributions_count: number;
+  pinned_packages_count: number;
+};
+
 export type PublicProfileResponse = {
   profile: PublicProfile;
+  pinned_packages: PublicPackageSummary[];
   public_packages: PublicPackageSummary[];
-  public_activity: PublicActivityEvent[];
-  stats: {
-    public_packages_count: number;
-    public_contributions_count: number;
-  };
+  contribution_grid: ContributionGridDay[];
+  recent_activity: PublicActivityEvent[];
+  public_activity?: PublicActivityEvent[];
+  stats: PublicProfileStats;
+};
+
+export type ProfilePinsData = {
+  package_ids: string[];
+  pinned_packages: PublicPackageSummary[];
 };
 
 export type Session = {

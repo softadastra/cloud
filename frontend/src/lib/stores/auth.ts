@@ -1,6 +1,8 @@
 import { browser } from '$app/environment';
 import { writable } from 'svelte/store';
 import { api } from '$lib/api/client';
+import { me } from '$lib/api/auth';
+import { ApiError } from '$lib/api/types';
 import type { LoginData, Session, User } from '$lib/api/types';
 
 const STORAGE_KEY = 'softadastra.cloud.auth';
@@ -57,6 +59,33 @@ function createAuthStore() {
       const state = { user: data.user, session: data.session };
       persist(state);
       store.set(state);
+    },
+    async refreshCurrentUser() {
+      let current: AuthState = initialState;
+
+      store.update((state) => {
+        current = state;
+        return state;
+      });
+
+      if (!current.session?.id) {
+        return false;
+      }
+
+      try {
+        const data = await me(current.session.id);
+        const next = { user: data.user, session: data.session };
+        persist(next);
+        store.set(next);
+        return true;
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) {
+          persist(initialState);
+          store.set(initialState);
+        }
+
+        return false;
+      }
     },
     setUser(user: User) {
       store.update((state) => {

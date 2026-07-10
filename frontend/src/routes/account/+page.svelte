@@ -261,7 +261,7 @@
     }
 
     if (file.size > 2 * 1024 * 1024) {
-      error = 'Avatar image must be 2MB or smaller.';
+      error = 'Choose an image smaller than 2MB.';
       input.value = '';
       return;
     }
@@ -712,18 +712,31 @@
           </label>
 
           <p>
-            Public profile lets other people see your name, avatar, bio, links,
-            and public package activity. Private workspaces, lockfiles, build
-            reports, tokens, members, and private packages are never shown.
+            Your public profile can show your avatar, name, username, bio,
+            links, public packages, pinned packages, and public package
+            activity. Private workspaces, private packages, lockfiles, build
+            reports, members, tokens, notifications, and feedback are never
+            shown.
           </p>
 
           {#if canViewPublicProfile}
-            <a
-              class="view-profile-link"
-              href={publicProfileUrl}
-            >
-              View public profile
-            </a>
+            <div class="public-profile-actions">
+              <a
+                class="view-profile-link"
+                href={publicProfileUrl}
+              >
+                View public profile
+              </a>
+
+              <a
+                class="view-profile-link"
+                href={publicProfileUrl + '?pins=1'}
+              >
+                Customize pins
+              </a>
+            </div>
+
+            <small>Publish a public package to start building your public profile.</small>
           {:else}
             <small>Choose a username and enable your public profile to view it.</small>
           {/if}
@@ -1334,6 +1347,12 @@
     color: var(--text-muted);
     font-size: 10.5px;
     line-height: 1.55;
+  }
+
+  .public-profile-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
   }
 
   .view-profile-link {

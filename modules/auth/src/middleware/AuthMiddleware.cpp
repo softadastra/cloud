@@ -537,6 +537,7 @@ namespace cloud::auth::middleware
          starts_with(req.path(), "/api/workspace_invites/accept") ||
          starts_with(req.path(), "/api/workspace_invites/decline") ||
          starts_with(req.path(), "/api/notifications") ||
+         starts_with(req.path(), "/api/profile/pins") ||
          starts_with(req.path(), "/api/feedback/create") ||
          starts_with(req.path(), "/api/feedback/list_mine")) &&
         workspace_id.empty())
