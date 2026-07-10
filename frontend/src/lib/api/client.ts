@@ -155,11 +155,14 @@ export class ApiClient {
       const failure = isApiFailure(payload)
         ? payload
         : { ok: false as const, error: 'http_error', message: `HTTP ${response.status}` };
-      throw new ApiError(
-        response.status,
-        failure.error,
-        response.status === 401 ? 'Session expired. Please log in again.' : failure.message
-      );
+      const message =
+        response.status === 401 && failure.error === 'unauthenticated'
+          ? 'Authentication is required. Please log in.'
+          : response.status === 401
+            ? 'Session expired. Please log in again.'
+            : failure.message;
+
+      throw new ApiError(response.status, failure.error, message);
     }
 
     if (!payload || payload.ok !== true || !('data' in payload)) {

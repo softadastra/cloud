@@ -5,6 +5,7 @@
   import { onMount } from 'svelte';
   import AccessScopeBadge from '$lib/components/AccessScopeBadge.svelte';
   import RoleBadge from '$lib/components/RoleBadge.svelte';
+  import WorkspaceAvatar from '$lib/components/WorkspaceAvatar.svelte';
   import { auth } from '$lib/stores/auth';
   import { notifications } from '$lib/stores/notifications';
   import { workspaceContext } from '$lib/stores/workspace';
@@ -151,6 +152,7 @@ $: standalonePage =
   currentPath === '/register' ||
   currentPath === '/support' ||
   currentPath === '/supporters' ||
+  currentPath === '/404' ||
   currentPath.startsWith('/u/');
 
   $: accountName =
@@ -191,12 +193,12 @@ $: standalonePage =
     verifyingSession = true;
     const sessionId = $auth.session.id;
 
-    auth.refreshCurrentUser().then((ok) => {
+    auth.refreshCurrentUser().then((status) => {
       verifyingSession = false;
 
-      if (ok) {
+      if (status === 'ok' || status === 'unreachable') {
         verifiedSessionId = sessionId;
-      } else if (currentPath !== '/login' && !currentPath.startsWith('/u/')) {
+      } else if (status === 'invalid' && currentPath !== '/login' && !currentPath.startsWith('/u/')) {
         void goto('/login');
       }
     });
@@ -244,18 +246,6 @@ $: standalonePage =
       SIDEBAR_GROUPS_KEY,
       JSON.stringify(expandedGroups)
     );
-  }
-
-  function workspaceAvatarUrl(value?: string) {
-    if (!value) {
-      return '';
-    }
-
-    return value.startsWith('http') ? value : `${API_BASE_URL}${value}`;
-  }
-
-  function workspaceInitial(name?: string) {
-    return (name || 'W').slice(0, 1).toUpperCase();
   }
 
   function isActive(href: string) {
@@ -663,17 +653,7 @@ $: standalonePage =
       {#if $workspaceContext.workspaces.length > 0}
         <section class="workspace-picker">
           <div class="workspace-picker__top">
-            <span class="workspace-picker__avatar">
-              {#if workspaceAvatarUrl($workspaceContext.selectedWorkspace?.avatar_url)}
-                <img
-                  src={workspaceAvatarUrl($workspaceContext.selectedWorkspace?.avatar_url)}
-                  alt=""
-                  aria-hidden="true"
-                />
-              {:else}
-                {workspaceInitial($workspaceContext.selectedWorkspace?.name)}
-              {/if}
-            </span>
+            <WorkspaceAvatar workspace={$workspaceContext.selectedWorkspace} size="sm" />
 
             <p class="workspace-picker__label">
               Current workspace
@@ -1101,6 +1081,7 @@ $: standalonePage =
   .nav-group__toggle svg.expanded {
     transform: rotate(90deg);
   }
+
 
   .nav-group__items {
     display: grid;

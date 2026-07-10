@@ -34,6 +34,19 @@ export const workspaceContext = {
       return { ...state, selectedWorkspace };
     });
   },
+  updateWorkspace(updated: Workspace) {
+    store.update((state) => {
+      const workspaces = state.workspaces.map((workspace) =>
+        workspace.id === updated.id ? { ...workspace, ...updated } : workspace
+      );
+      const selectedWorkspace =
+        state.selectedWorkspace?.id === updated.id
+          ? { ...state.selectedWorkspace, ...updated }
+          : workspaces.find((workspace) => workspace.id === state.selectedWorkspace?.id) ?? state.selectedWorkspace;
+
+      return { workspaces, selectedWorkspace };
+    });
+  },
   clear() {
     if (browser) localStorage.removeItem(STORAGE_KEY);
     store.set({ workspaces: [], selectedWorkspace: null });

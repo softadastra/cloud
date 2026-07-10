@@ -10,11 +10,15 @@ const STORAGE_KEY = 'softadastra.cloud.auth';
 export type AuthState = {
   user: User | null;
   session: Session | null;
+  sessionExpired: boolean;
+  authError: string;
 };
 
 const initialState: AuthState = {
   user: null,
-  session: null
+  session: null,
+  sessionExpired: false,
+  authError: ''
 };
 
 function loadState(): AuthState {
@@ -29,9 +33,15 @@ function loadState(): AuthState {
   }
 
   try {
-    const parsed = JSON.parse(raw) as AuthState;
-    api.setSession(parsed.session?.id ?? null);
-    return parsed;
+    const parsed = JSON.parse(raw) as Partial<AuthState>;
+    const state: AuthState = {
+      user: parsed.user ?? null,
+      session: parsed.session ?? null,
+      sessionExpired: false,
+      authError: ''
+    };
+    api.setSession(state.session?.id ?? null);
+    return state;
   } catch {
     localStorage.removeItem(STORAGE_KEY);
     return initialState;
@@ -46,7 +56,10 @@ function createAuthStore() {
 
     if (browser) {
       if (state.user && state.session) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({ user: state.user, session: state.session })
+        );
       } else {
         localStorage.removeItem(STORAGE_KEY);
       }
@@ -56,7 +69,7 @@ function createAuthStore() {
   return {
     subscribe: store.subscribe,
     setSession(data: LoginData) {
-      const state = { user: data.user, session: data.session };
+      const state = { user: data.user, session: data.session, sessionExpired: false, authError: '' };
       persist(state);
       store.set(state);
     },
@@ -69,27 +82,44 @@ function createAuthStore() {
       });
 
       if (!current.session?.id) {
-        return false;
+        return 'missing' as const;
       }
 
       try {
         const data = await me(current.session.id);
-        const next = { user: data.user, session: data.session };
+        const next = { user: data.user, session: data.session, sessionExpired: false, authError: '' };
         persist(next);
         store.set(next);
-        return true;
+        return 'ok' as const;
       } catch (error) {
-        if (error instanceof ApiError && error.status === 401) {
-          persist(initialState);
-          store.set(initialState);
+        if (
+          error instanceof ApiError &&
+          error.status === 401 &&
+          error.code !== 'network_error'
+        ) {
+          const next = {
+            ...initialState,
+            sessionExpired: true,
+            authError: error.message || 'Session expired. Please log in again.'
+          };
+          persist(next);
+          store.set(next);
+          return 'invalid' as const;
         }
 
-        return false;
+        return 'unreachable' as const;
       }
     },
     setUser(user: User) {
       store.update((state) => {
-        const next = { ...state, user };
+        const next = { ...state, user, sessionExpired: false, authError: '' };
+        persist(next);
+        return next;
+      });
+    },
+    clearAuthError() {
+      store.update((state) => {
+        const next = { ...state, sessionExpired: false, authError: '' };
         persist(next);
         return next;
       });

@@ -1,6 +1,5 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
-  import { browser } from '$app/environment';
   import { onMount } from 'svelte';
   import { listMembers } from '$lib/api/members';
   import { listProjects } from '$lib/api/projects';
@@ -25,6 +24,7 @@
   import InlineError from '$lib/components/InlineError.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import ReadOnlyNotice from '$lib/components/ReadOnlyNotice.svelte';
+  import WorkspaceAvatar from '$lib/components/WorkspaceAvatar.svelte';
   import {
     canCreateProject,
     canManageMembers,
@@ -32,10 +32,6 @@
   } from '$lib/permissions';
   import { auth } from '$lib/stores/auth';
   import { workspaceContext } from '$lib/stores/workspace';
-
-  const API_BASE_URL =
-    import.meta.env.VITE_API_BASE_URL ??
-    (browser ? `${window.location.protocol}//${window.location.hostname}:8080` : '');
 
   let workspaces: Workspace[] = [];
   let selectedWorkspace: Workspace | null = null;
@@ -52,6 +48,7 @@
   let loadingDetail = false;
   let savingSettings = false;
   let uploadingAvatar = false;
+  let avatarPreviewUrl = '';
   let error = '';
   let success = '';
 
@@ -120,20 +117,6 @@
     return token.revoked ? 'Revoked' : 'Active';
   }
 
-  function workspaceInitial(workspace: Workspace) {
-    return workspace.name.slice(0, 1).toUpperCase();
-  }
-
-  function workspaceAvatarUrl(workspace: Workspace) {
-    if (!workspace.avatar_url) {
-      return '';
-    }
-
-    return workspace.avatar_url.startsWith('http')
-      ? workspace.avatar_url
-      : `${API_BASE_URL}${workspace.avatar_url}`;
-  }
-
   function canManageWorkspace() {
     return currentRole === 'owner' || currentRole === 'admin';
   }
@@ -148,10 +131,13 @@
     }
 
     workspaces = workspaces.map((workspace) =>
-      workspace.id === updated.id ? updated : workspace
+      workspace.id === updated.id ? { ...workspace, ...updated } : workspace
     );
-    selectedWorkspace = updated;
-    workspaceContext.setWorkspaces(workspaces, updated.id);
+    selectedWorkspace =
+      selectedWorkspace?.id === updated.id
+        ? { ...selectedWorkspace, ...updated }
+        : updated;
+    workspaceContext.updateWorkspace(selectedWorkspace);
   }
 
   function updateWorkspaceUrl(workspaceId: string) {
@@ -264,6 +250,7 @@
     }
 
     selectedWorkspace = workspace;
+    avatarPreviewUrl = '';
     editName = workspace.name;
     editSlug = workspace.slug;
     copiedWorkspaceId = false;
@@ -312,6 +299,11 @@
       return;
     }
 
+    if (avatarPreviewUrl) {
+      URL.revokeObjectURL(avatarPreviewUrl);
+    }
+
+    avatarPreviewUrl = URL.createObjectURL(file);
     uploadingAvatar = true;
     error = '';
     success = '';
@@ -328,6 +320,10 @@
     } finally {
       uploadingAvatar = false;
       input.value = '';
+      if (avatarPreviewUrl) {
+        URL.revokeObjectURL(avatarPreviewUrl);
+        avatarPreviewUrl = '';
+      }
     }
   }
 
@@ -341,6 +337,10 @@
     success = '';
 
     try {
+      if (avatarPreviewUrl) {
+        URL.revokeObjectURL(avatarPreviewUrl);
+        avatarPreviewUrl = '';
+      }
       await deleteWorkspaceAvatar(selectedWorkspace.id);
       syncWorkspace({
         ...selectedWorkspace,
@@ -566,13 +566,7 @@
             }
             onclick={() => selectWorkspace(workspace)}
           >
-            <span class="workspace-option__mark">
-              {#if workspaceAvatarUrl(workspace)}
-                <img src={workspaceAvatarUrl(workspace)} alt="" aria-hidden="true" />
-              {:else}
-                {workspaceInitial(workspace)}
-              {/if}
-            </span>
+            <WorkspaceAvatar {workspace} size="sm" />
 
             <span class="workspace-option__content">
               <strong>{workspace.name}</strong>
@@ -609,13 +603,7 @@
       >
         <div class="workspace-overview__header">
           <div class="workspace-identity">
-            <span class="workspace-mark">
-              {#if workspaceAvatarUrl(selectedWorkspace)}
-                <img src={workspaceAvatarUrl(selectedWorkspace)} alt="" aria-hidden="true" />
-              {:else}
-                {workspaceInitial(selectedWorkspace)}
-              {/if}
-            </span>
+            <WorkspaceAvatar workspace={selectedWorkspace} />
 
             <div>
               <div class="workspace-name-line">
@@ -777,13 +765,7 @@
 
           <div class="workspace-settings-grid">
             <div class="avatar-control">
-              <span class="workspace-mark workspace-mark--large">
-                {#if workspaceAvatarUrl(selectedWorkspace)}
-                  <img src={workspaceAvatarUrl(selectedWorkspace)} alt="" aria-hidden="true" />
-                {:else}
-                  {workspaceInitial(selectedWorkspace)}
-                {/if}
-              </span>
+              <WorkspaceAvatar workspace={selectedWorkspace} size="lg" previewUrl={avatarPreviewUrl} />
 
               <div>
                 <label class="avatar-upload-button">
@@ -796,7 +778,7 @@
                   />
                 </label>
 
-                {#if selectedWorkspace.avatar_url}
+                {#if selectedWorkspace.avatar_url || avatarPreviewUrl}
                   <button
                     class="secondary-button"
                     type="button"
@@ -1221,25 +1203,6 @@
     box-shadow: inset 2px 0 0 var(--brand);
   }
 
-  .workspace-option__mark {
-    display: grid;
-    width: 30px;
-    height: 30px;
-    place-items: center;
-    border: 1px solid var(--line-strong);
-    border-radius: var(--radius-sm);
-    background: var(--bg-elevated);
-    color: var(--text-soft);
-    font-size: 11px;
-    font-weight: 650;
-  }
-
-  .workspace-option.selected .workspace-option__mark {
-    border-color: var(--brand-line);
-    background: var(--brand-faint);
-    color: var(--brand-bright);
-  }
-
   .workspace-option__content {
     display: grid;
     min-width: 0;
@@ -1317,20 +1280,6 @@
     min-width: 0;
     align-items: center;
     gap: 11px;
-  }
-
-  .workspace-mark {
-    display: grid;
-    width: 40px;
-    height: 40px;
-    flex: 0 0 auto;
-    place-items: center;
-    border: 1px solid var(--line-strong);
-    border-radius: var(--radius-sm);
-    background: var(--bg-elevated);
-    color: var(--text-soft);
-    font-size: 14px;
-    font-weight: 650;
   }
 
   .workspace-identity > div {
@@ -1511,6 +1460,87 @@
 
   .workspace-actions a {
     font-size: 11.5px;
+  }
+
+  .workspace-settings-grid {
+    display: grid;
+    grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.2fr);
+    gap: 18px;
+    padding: 16px;
+  }
+
+  .avatar-control {
+    display: grid;
+    grid-template-columns: 92px minmax(0, 1fr);
+    gap: 14px;
+    align-items: center;
+    min-width: 0;
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius-md);
+    background: var(--bg-elevated);
+    padding: 14px;
+  }
+
+  .avatar-control > div {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .avatar-control p {
+    width: 100%;
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 11px;
+  }
+
+  .avatar-upload-button {
+    position: relative;
+    display: inline-flex;
+    min-height: 34px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--brand-line);
+    border-radius: var(--radius-sm);
+    background: var(--brand-faint);
+    color: var(--brand-bright);
+    padding: 0 12px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .avatar-upload-button:hover {
+    border-color: var(--brand);
+    background: var(--brand-soft);
+  }
+
+  .avatar-upload-button input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  .workspace-settings-form {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    align-items: end;
+    min-width: 0;
+  }
+
+  .workspace-settings-form button {
+    justify-self: start;
+  }
+
+  @media (max-width: 860px) {
+    .workspace-settings-grid,
+    .workspace-settings-form {
+      grid-template-columns: 1fr;
+    }
   }
 
   /* Workspace content */

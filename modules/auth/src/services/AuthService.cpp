@@ -23,6 +23,7 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <stdexcept>
 
 #include <vix/config/Config.hpp>
 #include <vix/db/db.hpp>
@@ -45,13 +46,33 @@ namespace cloud::auth::services
       return rixlib::auth::make_auth_error(code, message);
     }
 
+    int session_ttl_days()
+    {
+      const char *raw = std::getenv("SOFTADASTRA_SESSION_TTL_DAYS");
+
+      if (raw == nullptr || std::string(raw).empty())
+      {
+        return 30;
+      }
+
+      try
+      {
+        const auto value = std::stoi(raw);
+        return std::clamp(value, 1, 365);
+      }
+      catch (const std::exception &)
+      {
+        return 30;
+      }
+    }
+
     rixlib::auth::AuthConfig make_auth_config()
     {
       auto config = rix.auth.config.development();
 
       config.set_issuer("softadastra-cloud");
       config.set_require_email_verification(false);
-      config.set_session_ttl_seconds(60 * 60 * 24 * 7);
+      config.set_session_ttl_seconds(60 * 60 * 24 * session_ttl_days());
       config.set_token_ttl_seconds(60 * 15);
 
       return config;

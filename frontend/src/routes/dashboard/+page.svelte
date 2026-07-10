@@ -16,6 +16,7 @@
   } from '$lib/api/types';
   import EmptyState from '$lib/components/EmptyState.svelte';
   import InlineError from '$lib/components/InlineError.svelte';
+  import WorkspaceAvatar from '$lib/components/WorkspaceAvatar.svelte';
   import {
     canCreateProject,
     canManageMembers,
@@ -656,11 +657,7 @@
   {:else}
     <div class="current-workspace">
       <div class="workspace-identity">
-        <div class="workspace-mark" aria-hidden="true">
-          {selectedWorkspace.name
-            .slice(0, 1)
-            .toUpperCase()}
-        </div>
+        <WorkspaceAvatar workspace={selectedWorkspace} />
 
         <div>
           <div class="workspace-name-line">
@@ -862,9 +859,7 @@
           href={`/workspaces?workspace_id=${workspace.id}`}
         >
           <div class="workspace-row__identity">
-            <span class="workspace-row__mark">
-              {workspace.name.slice(0, 1).toUpperCase()}
-            </span>
+            <WorkspaceAvatar {workspace} size="sm" />
 
             <div>
               <strong>{workspace.name}</strong>
@@ -1165,24 +1160,6 @@
     gap: 11px;
   }
 
-  .workspace-mark,
-  .workspace-row__mark {
-    display: grid;
-    flex: 0 0 auto;
-    place-items: center;
-    border: 1px solid var(--line-strong);
-    border-radius: var(--radius-sm);
-    background: var(--bg-elevated);
-    color: var(--text-soft);
-    font-weight: 650;
-  }
-
-  .workspace-mark {
-    width: 38px;
-    height: 38px;
-    font-size: 14px;
-  }
-
   .workspace-identity > div:last-child {
     display: grid;
     min-width: 0;
@@ -1444,12 +1421,6 @@
     min-width: 0;
     align-items: center;
     gap: 10px;
-  }
-
-  .workspace-row__mark {
-    width: 30px;
-    height: 30px;
-    font-size: 11px;
   }
 
   .workspace-row__identity > div {
