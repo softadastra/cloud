@@ -231,12 +231,24 @@
         window.location.search
       ).get('workspace_id');
 
-      selectedWorkspaceId =
+      const storedWorkspaceId =
+        globalWorkspaceId ||
+        ($workspaceContext.selectedWorkspace?.id ?? '');
+
+      const preferredWorkspaceId =
         requestedWorkspaceId &&
         workspaces.some(
           (workspace) => workspace.id === requestedWorkspaceId
         )
           ? requestedWorkspaceId
+          : storedWorkspaceId;
+
+      selectedWorkspaceId =
+        preferredWorkspaceId &&
+        workspaces.some(
+          (workspace) => workspace.id === preferredWorkspaceId
+        )
+          ? preferredWorkspaceId
           : workspaces[0]?.id ?? '';
 
       workspaceContext.setWorkspaces(
@@ -286,6 +298,10 @@
     if (canManageMembersContext(context)) {
       const inviteData =
         await listWorkspaceInvites(selectedWorkspaceId);
+
+      if (requestId !== memberRequestId) {
+        return;
+      }
 
       invites = inviteData.invites;
     } else {

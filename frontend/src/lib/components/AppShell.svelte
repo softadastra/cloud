@@ -249,10 +249,45 @@ $: standalonePage =
     );
   }
 
+  const workspaceScopedRoutes = new Set([
+    "/dashboard",
+    "/workspaces",
+    "/projects",
+    "/members",
+    "/packages",
+    "/package-versions",
+    "/lockfiles",
+    "/build-reports",
+    "/tokens"
+  ]);
+
+  function routePath(href: string) {
+    return href.split("?", 1)[0];
+  }
+
+  function navigationHref(href: string) {
+    const workspaceId = $workspaceContext.selectedWorkspace?.id ?? "";
+    const path = routePath(href);
+
+    if (!workspaceId || !workspaceScopedRoutes.has(path)) {
+      return href;
+    }
+
+    const queryStart = href.indexOf("?");
+    const params = new URLSearchParams(
+      queryStart === -1 ? "" : href.slice(queryStart + 1)
+    );
+    params.set("workspace_id", workspaceId);
+
+    return path + "?" + params.toString();
+  }
+
   function isActive(href: string) {
+    const path = routePath(href);
+
     return (
-      currentPath === href ||
-      currentPath.startsWith(`${href}/`)
+      currentPath === path ||
+      currentPath.startsWith(path + "/")
     );
   }
 
@@ -727,7 +762,7 @@ $: standalonePage =
                   <a
                     class:active={isActive(item.href)}
                     class="nav-item"
-                    href={item.href}
+                    href={navigationHref(item.href)}
                     aria-current={
                       isActive(item.href)
                         ? 'page'
