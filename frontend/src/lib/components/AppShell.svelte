@@ -154,7 +154,8 @@ $: standalonePage =
   currentPath === '/support' ||
   currentPath === '/supporters' ||
   currentPath === '/404' ||
-  currentPath.startsWith('/u/');
+  currentPath.startsWith('/u/') ||
+  currentPath.startsWith('/p/');
 
   $: accountName =
     $auth.user?.display_name ||
@@ -199,7 +200,7 @@ $: standalonePage =
 
       if (status === 'ok' || status === 'unreachable') {
         verifiedSessionId = sessionId;
-      } else if (status === 'invalid' && currentPath !== '/login' && !currentPath.startsWith('/u/')) {
+      } else if (status === 'invalid' && !standalonePage) {
         void goto('/login');
       }
     });

@@ -54,7 +54,11 @@
     event.preventDefault();
 
     if (!item.read_at) {
-      await markRead(item.id);
+      try {
+        await markRead(item.id);
+      } catch {
+        // Navigation is more important than read-state sync; the list can refresh later.
+      }
     }
 
     await goto(href);
