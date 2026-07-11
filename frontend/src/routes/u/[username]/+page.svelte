@@ -152,7 +152,12 @@ $: canCustomizePins = isOwner;
   }
 
   function packageHref(packageItem: PublicPackageSummary) {
-    return '/packages?package_id=' + encodeURIComponent(packageItem.id);
+    const packageNamespace = packageItem.namespace || packageItem.full_name?.split('/')[0] || username;
+    const packageName = packageItem.full_name?.includes('/')
+      ? packageItem.full_name.split('/').slice(1).join('/')
+      : packageItem.name;
+
+    return `/p/${encodeURIComponent(packageNamespace)}/${encodeURIComponent(packageName)}`;
   }
 
   function openPins() {
@@ -232,7 +237,7 @@ $: canCustomizePins = isOwner;
 {#snippet packageCard(packageItem: PublicPackageSummary, pinned = false)}
   <article class:package-card={true} class:pinned={pinned}>
     <div class="package-title-row">
-      <h3><a href={packageHref(packageItem)}>{packageItem.name}</a></h3>
+      <h3><a href={packageHref(packageItem)}>{packageItem.full_name || (packageItem.namespace ? `${packageItem.namespace}/${packageItem.name}` : packageItem.name)}</a></h3>
       <span class="visibility-pill">Public</span>
     </div>
     <p>{packageItem.description || 'No package description yet.'}</p>

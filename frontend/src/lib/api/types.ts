@@ -163,7 +163,9 @@ export type PublicProfile = {
 
 export type PublicPackageSummary = {
   id: string;
+  namespace?: string;
   name: string;
+  full_name?: string;
   description: string;
   repository_url: string;
   visibility: "public" | string;
@@ -172,6 +174,56 @@ export type PublicPackageSummary = {
   latest_version?: string;
   versions_count?: number;
   package_type?: string;
+};
+
+export type PublicPackageOwner = {
+  display_name: string;
+  username: string;
+  avatar_url: string;
+  avatar_updated_at: number;
+  supporter?: {
+    tier: string;
+  } | null;
+};
+
+export type PublicPackageStats = {
+  versions_count: number;
+  active_versions_count: number;
+  latest_version: string;
+};
+
+export type PublicPackageVersionSummary = {
+  id: string;
+  version: string;
+  status: "active" | "deprecated" | "yanked" | string;
+  checksum: string;
+  archive_size: number;
+  created_at: number;
+  deprecated_at: number | null;
+  deprecation_message: string | null;
+  yanked_at: number | null;
+};
+
+export type PublicPackageActivityEvent = PublicActivityEvent;
+
+export type PublicPackageDetail = {
+  id: string;
+  namespace: string;
+  name: string;
+  description: string;
+  visibility: "public" | string;
+  status: "active" | "archived" | string;
+  repository_url: string;
+  created_at: number;
+  updated_at: number;
+  owner: PublicPackageOwner;
+  stats: PublicPackageStats;
+  versions: PublicPackageVersionSummary[];
+  recent_activity: PublicPackageActivityEvent[];
+};
+
+export type PublicPackageShowResponse = {
+  package: PublicPackageDetail;
 };
 
 export type PublicActivityEvent = {

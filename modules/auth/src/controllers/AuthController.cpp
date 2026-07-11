@@ -363,8 +363,8 @@ namespace cloud::auth::controllers
         const vix::db::ResultRow &row)
     {
       auto version_rows = db.query(
-          "SELECT COUNT(*), COALESCE((SELECT version FROM package_versions WHERE package_id = ? ORDER BY created_at DESC LIMIT 1), '') "
-          "FROM package_versions WHERE package_id = ?",
+          "SELECT COUNT(*), COALESCE((SELECT version FROM package_versions WHERE package_id = ? AND COALESCE(deleted_at, 0) = 0 AND COALESCE(status, '') != 'deleted' ORDER BY created_at DESC LIMIT 1), '') "
+          "FROM package_versions WHERE package_id = ? AND COALESCE(deleted_at, 0) = 0 AND COALESCE(status, '') != 'deleted'",
           row.getString(0),
           row.getString(0));
 
@@ -377,8 +377,33 @@ namespace cloud::auth::controllers
       }
 
       auto item = vix::json::Json::object();
+      const auto full_name = row.getString(1);
+      const auto slash = full_name.find('/');
+      std::string package_namespace;
+      std::string package_name = full_name;
+
+      if (slash != std::string::npos)
+      {
+        package_namespace = full_name.substr(0, slash);
+        package_name = full_name.substr(slash + 1);
+      }
+      else
+      {
+        auto owner_rows = db.query(
+            "SELECT COALESCE(up.username, '') FROM packages p "
+            "LEFT JOIN user_profiles up ON up.user_id = p.owner_user_id "
+            "WHERE p.id = ? LIMIT 1",
+            row.getString(0));
+        if (owner_rows->next() && !owner_rows->row().getString(0).empty())
+        {
+          package_namespace = owner_rows->row().getString(0);
+        }
+      }
+
       item["id"] = row.getString(0);
-      item["name"] = row.getString(1);
+      item["namespace"] = package_namespace;
+      item["name"] = package_name;
+      item["full_name"] = full_name;
       item["description"] = row.getString(2);
       item["repository_url"] = row.getString(3);
       item["visibility"] = row.getString(4);
@@ -425,6 +450,57 @@ namespace cloud::auth::controllers
     bool can_expose_public_activity(const std::string &visibility)
     {
       return visibility == "public";
+    }
+
+    std::string normalize_public_package_segment(const std::string &value)
+    {
+      std::string normalized;
+      for (const char ch : value)
+      {
+        const auto c = static_cast<unsigned char>(ch);
+        if (std::isalnum(c))
+        {
+          normalized.push_back(static_cast<char>(std::tolower(c)));
+          continue;
+        }
+        if (ch == '-' || ch == '_' || ch == '.')
+        {
+          normalized.push_back(ch);
+        }
+      }
+      return normalized;
+    }
+
+    std::string public_version_status(
+        const std::string &status,
+        std::int64_t yanked_at,
+        std::int64_t deprecated_at)
+    {
+      if (status == "deleted")
+      {
+        return "deleted";
+      }
+      if (yanked_at > 0)
+      {
+        return "yanked";
+      }
+      if (deprecated_at > 0)
+      {
+        return "deprecated";
+      }
+      return "active";
+    }
+
+    vix::json::Json public_package_activity_json(const vix::db::ResultRow &row)
+    {
+      auto item = vix::json::Json::object();
+      item["id"] = row.getString(0);
+      item["package_id"] = row.getString(1);
+      item["type"] = row.getString(2);
+      item["title"] = row.getString(3);
+      item["data_json"] = row.getString(4);
+      item["created_at"] = row.getInt64(6);
+      return item;
     }
 
     void ensure_public_activity_table(vix::db::Database &db)
@@ -513,6 +589,22 @@ namespace cloud::auth::controllers
       if (rows->next())
       {
         return supporter_public_json(rows->row());
+      }
+
+      return vix::json::Json{};
+    }
+
+    vix::json::Json active_public_supporter_badge_for_user(vix::db::Database &db, const std::string &user_id)
+    {
+      auto rows = db.query(
+          "SELECT tier FROM founding_supporters "
+          "WHERE user_id = ? AND status = 'active' AND public_visible = 1 "
+          "ORDER BY stronger_visibility DESC, started_at ASC LIMIT 1",
+          user_id);
+
+      if (rows->next())
+      {
+        return vix::json::o("tier", rows->row().getString(0));
       }
 
       return vix::json::Json{};
@@ -748,6 +840,180 @@ namespace cloud::auth::controllers
       catch (...)
       {
         json_error(res, 500, "public_profile_error", "Could not load public profile.");
+      }
+    }
+
+    void public_package_show(vix::Request &req, vix::Response &res)
+    {
+      std::string package_namespace;
+      std::string package_name;
+
+      try
+      {
+        const auto &body = req.json();
+        if (body.is_object())
+        {
+          package_namespace = normalize_public_package_segment(body.value("namespace", ""));
+          package_name = normalize_public_package_segment(body.value("name", ""));
+        }
+      }
+      catch (...)
+      {
+      }
+
+      if (package_namespace.empty() || package_name.empty())
+      {
+        json_error(res, 400, "package_required", "Package namespace and name are required.");
+        return;
+      }
+
+      const auto full_name = package_namespace + "/" + package_name;
+
+      try
+      {
+        vix::config::Config cfg{".env"};
+        vix::db::Database db{cfg};
+        ensure_public_activity_table(db);
+        ensure_founding_supporters_table(db);
+
+        auto package_rows = db.query(
+            "SELECT p.id, p.name, COALESCE(p.description, ''), COALESCE(p.repository_url, ''), "
+            "p.visibility, p.active, p.created_at, p.updated_at, COALESCE(p.status, 'active'), "
+            "p.owner_user_id, COALESCE(up.display_name, ''), COALESCE(up.username, ''), "
+            "COALESCE(up.avatar_url, ''), COALESCE(up.avatar_updated_at, 0), COALESCE(up.public_profile_enabled, 0) "
+            "FROM packages p "
+            "LEFT JOIN user_profiles up ON up.user_id = p.owner_user_id "
+            "WHERE p.visibility = 'public' "
+            "AND COALESCE(p.status, 'active') IN ('active', 'archived') "
+            "AND COALESCE(p.deleted_at, 0) = 0 "
+            "AND (p.name = ? OR (up.username = ? AND p.name = ?)) "
+            "ORDER BY p.updated_at DESC LIMIT 1",
+            full_name,
+            package_namespace,
+            package_name);
+
+        if (!package_rows->next())
+        {
+          json_error(res, 404, "package_not_found", "Package not found.");
+          return;
+        }
+
+        const auto &package_row = package_rows->row();
+        const auto package_id = package_row.getString(0);
+        const auto stored_full_name = package_row.getString(1);
+        const auto slash = stored_full_name.find('/');
+        const auto response_namespace = slash == std::string::npos ? package_namespace : stored_full_name.substr(0, slash);
+        const auto response_name = slash == std::string::npos ? package_name : stored_full_name.substr(slash + 1);
+        const auto package_status = package_row.getString(8);
+        const auto owner_user_id = package_row.getString(9);
+        const auto owner_username = looks_like_email(package_row.getString(11)) ? std::string{} : package_row.getString(11);
+        const auto owner_display_name = looks_like_email(package_row.getString(10))
+                                            ? (owner_username.empty() ? std::string{"Softadastra developer"} : owner_username)
+                                            : package_row.getString(10);
+
+        auto versions = vix::json::Json::array();
+        std::int64_t versions_count = 0;
+        std::int64_t active_versions_count = 0;
+        std::string latest_version;
+        std::string fallback_latest_version;
+
+        auto version_rows = db.query(
+            "SELECT id, version, COALESCE(status, 'published'), checksum_sha256, size_bytes, created_at, "
+            "COALESCE(deprecated_at, 0), COALESCE(deprecation_message, ''), COALESCE(yanked_at, 0) "
+            "FROM package_versions "
+            "WHERE package_id = ? AND COALESCE(deleted_at, 0) = 0 AND COALESCE(status, '') != 'deleted' "
+            "ORDER BY created_at DESC",
+            package_id);
+
+        while (version_rows->next())
+        {
+          const auto &row = version_rows->row();
+          const auto status = public_version_status(row.getString(2), row.getInt64(8), row.getInt64(6));
+          if (status == "deleted")
+          {
+            continue;
+          }
+
+          versions_count += 1;
+          if (fallback_latest_version.empty())
+          {
+            fallback_latest_version = row.getString(1);
+          }
+          if (status == "active")
+          {
+            active_versions_count += 1;
+            if (latest_version.empty())
+            {
+              latest_version = row.getString(1);
+            }
+          }
+
+          auto version = vix::json::Json::object();
+          version["id"] = row.getString(0);
+          version["version"] = row.getString(1);
+          version["status"] = status;
+          version["checksum"] = row.getString(3);
+          version["archive_size"] = row.getInt64(4);
+          version["created_at"] = row.getInt64(5);
+          version["deprecated_at"] = row.getInt64(6) > 0 ? vix::json::Json(row.getInt64(6)) : vix::json::Json{};
+          version["deprecation_message"] = row.getString(7).empty() ? vix::json::Json{} : vix::json::Json(row.getString(7));
+          version["yanked_at"] = row.getInt64(8) > 0 ? vix::json::Json(row.getInt64(8)) : vix::json::Json{};
+          versions.push_back(version);
+        }
+
+        if (latest_version.empty())
+        {
+          latest_version = fallback_latest_version;
+        }
+
+        auto recent_activity = vix::json::Json::array();
+        auto activity_rows = db.query(
+            "SELECT id, COALESCE(package_id, ''), type, title, COALESCE(data_json, '{}'), visibility, created_at "
+            "FROM public_activity_events "
+            "WHERE package_id = ? AND visibility = 'public' "
+            "AND type IN ('public_package_created', 'public_package_version_published', 'package_visibility_changed_to_public') "
+            "ORDER BY created_at DESC LIMIT 20",
+            package_id);
+
+        while (activity_rows->next())
+        {
+          const auto &row = activity_rows->row();
+          if (can_expose_public_activity(row.getString(5)))
+          {
+            recent_activity.push_back(public_package_activity_json(row));
+          }
+        }
+
+        auto owner = vix::json::Json::object();
+        owner["display_name"] = owner_display_name;
+        owner["username"] = owner_username;
+        owner["avatar_url"] = package_row.getString(12);
+        owner["avatar_updated_at"] = package_row.getInt64(13);
+        owner["supporter"] = active_public_supporter_badge_for_user(db, owner_user_id);
+
+        auto package = vix::json::Json::object();
+        package["id"] = package_id;
+        package["namespace"] = response_namespace;
+        package["name"] = response_name;
+        package["description"] = package_row.getString(2);
+        package["visibility"] = package_row.getString(4);
+        package["status"] = package_status;
+        package["repository_url"] = package_row.getString(3);
+        package["created_at"] = package_row.getInt64(6);
+        package["updated_at"] = package_row.getInt64(7);
+        package["owner"] = owner;
+        package["stats"] = vix::json::o(
+            "versions_count", versions_count,
+            "active_versions_count", active_versions_count,
+            "latest_version", latest_version);
+        package["versions"] = versions;
+        package["recent_activity"] = recent_activity;
+
+        json_ok(res, vix::json::o("package", package));
+      }
+      catch (...)
+      {
+        json_error(res, 500, "public_package_error", "Could not load public package.");
       }
     }
 
@@ -2085,6 +2351,9 @@ namespace cloud::auth::controllers
 
     app.post("/api/public/users/show", [](vix::Request &req, vix::Response &res)
              { public_profile_show(req, res); });
+
+    app.post("/api/public/packages/show", [](vix::Request &req, vix::Response &res)
+             { public_package_show(req, res); });
 
     app.get("/api/public/users/show", [](vix::Request &req, vix::Response &res)
             { public_profile_show(req, res); });
