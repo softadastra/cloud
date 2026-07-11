@@ -1,9 +1,12 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
   import InlineError from '$lib/components/InlineError.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import { notifications } from '$lib/stores/notifications';
+  import { notificationHref } from '$lib/notifications/notificationLinks';
+  import type { NotificationItem } from '$lib/api/types';
 
   let filter: 'all' | 'unread' | 'read' = 'all';
   let actionError = '';
@@ -32,6 +35,29 @@
     } catch (err) {
       actionError = err instanceof Error ? err.message : 'Unable to mark all as read.';
     }
+  }
+
+  async function openNotification(event: MouseEvent, item: NotificationItem) {
+    const href = notificationHref(item);
+
+    if (
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    ) {
+      if (!item.read_at) void markRead(item.id);
+      return;
+    }
+
+    event.preventDefault();
+
+    if (!item.read_at) {
+      await markRead(item.id);
+    }
+
+    await goto(href);
   }
 
   function dateLabel(value: number) {
@@ -91,12 +117,12 @@
   {:else}
     <div class="table-list notif-list">
       {#each items as item (item.id)}
-        <button
+        <a
           class="row notif-row"
           class:notif-unread={!item.read_at}
-          type="button"
+          href={notificationHref(item)}
           aria-label="{item.read_at ? '' : 'Unread: '}{item.title}"
-          on:click={() => !item.read_at && markRead(item.id)}
+          on:click={(event) => openNotification(event, item)}
         >
           <span class="notif-dot-col" aria-hidden="true">
             {#if !item.read_at}
@@ -115,7 +141,7 @@
               <small class="notif-date">{dateLabel(item.created_at)}</small>
             {/if}
           </span>
-        </button>
+        </a>
       {/each}
     </div>
   {/if}
@@ -177,8 +203,9 @@
     background: transparent;
     color: var(--text);
     text-align: left;
-    cursor: default;
+    cursor: pointer;
     font-size: 13.5px;
+    text-decoration: none;
     transition: background var(--speed) var(--ease);
   }
 
@@ -191,7 +218,6 @@
   }
 
   .notif-unread {
-    cursor: pointer;
     background: rgba(249, 115, 22, 0.03);
   }
 

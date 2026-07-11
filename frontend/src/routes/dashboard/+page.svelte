@@ -24,6 +24,7 @@
   } from '$lib/permissions';
   import { auth } from '$lib/stores/auth';
   import { notifications } from '$lib/stores/notifications';
+  import { notificationHref } from '$lib/notifications/notificationLinks';
   import { workspaceContext } from '$lib/stores/workspace';
 
   type DashboardProject = {
@@ -815,7 +816,7 @@
     {:else}
       <div class="activity-list">
         {#each recentNotifications as item (item.id)}
-          <a class="activity-row" href="/notifications">
+          <a class="activity-row" href={notificationHref(item)}>
             <span
               class:unread={!item.read_at}
               class="activity-indicator"
