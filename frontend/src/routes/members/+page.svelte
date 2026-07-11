@@ -1,6 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { onMount, tick } from 'svelte';
+  import { get } from 'svelte/store';
   import {
     listMembers,
     reactivateMember,
@@ -60,7 +61,7 @@
   let loading = true;
   let saving = false;
   let initialized = false;
-  let memberRequestId = 0;
+  let loadSeq = 0;
   let busyId = '';
   let error = '';
   let success = '';
@@ -85,7 +86,7 @@
     globalWorkspaceId !== selectedWorkspaceId &&
     workspaces.some((workspace) => workspace.id === globalWorkspaceId)
   ) {
-    void switchWorkspace(globalWorkspaceId);
+    void loadForWorkspace(globalWorkspaceId, { updateUrl: true });
   }
 
   $: pendingInvites = invites.filter(
@@ -211,109 +212,134 @@
     void changeRole(member, select.value);
   }
 
-  async function load() {
-    const user = $auth.user;
+  function memberErrorMessage(err: unknown) {
+    return err instanceof ApiError
+      ? err.message
+      : 'Unable to load members.';
+  }
 
-    if (!$auth.session || !user) {
+  function resolveWorkspaceId(requestedWorkspaceId: string | null) {
+    const storedWorkspaceId =
+      globalWorkspaceId ||
+      get(workspaceContext).selectedWorkspace?.id ||
+      '';
+
+    if (
+      requestedWorkspaceId &&
+      workspaces.some((workspace) => workspace.id === requestedWorkspaceId)
+    ) {
+      return requestedWorkspaceId;
+    }
+
+    if (
+      storedWorkspaceId &&
+      workspaces.some((workspace) => workspace.id === storedWorkspaceId)
+    ) {
+      return storedWorkspaceId;
+    }
+
+    return workspaces[0]?.id ?? '';
+  }
+
+  function updateWorkspaceUrl(workspaceId: string) {
+    const url = new URL(window.location.href);
+
+    if (workspaceId) {
+      url.searchParams.set('workspace_id', workspaceId);
+    } else {
+      url.searchParams.delete('workspace_id');
+    }
+
+    history.replaceState(null, '', `${url.pathname}${url.search}`);
+  }
+
+  async function load() {
+    if (!$auth.session) {
       await goto('/login');
       return;
     }
 
+    if (!$auth.user) {
+      const status = await auth.ensureAuthLoaded();
+      if (status === 'missing' || status === 'invalid') {
+        await goto('/login');
+        return;
+      }
+    }
+
+    const user = $auth.user;
+
+    if (!user) {
+      error = 'Unable to load the current account.';
+      loading = false;
+      return;
+    }
+
+    const seq = ++loadSeq;
     loading = true;
     error = '';
+    success = '';
+    initialized = false;
+    members = [];
+    invites = [];
+    projects = [];
 
     try {
       const workspaceData = await listWorkspaces(user.id);
 
-      workspaces = workspaceData.workspaces;
-
-      const requestedWorkspaceId = new URLSearchParams(
-        window.location.search
-      ).get('workspace_id');
-
-      const storedWorkspaceId =
-        globalWorkspaceId ||
-        ($workspaceContext.selectedWorkspace?.id ?? '');
-
-      const preferredWorkspaceId =
-        requestedWorkspaceId &&
-        workspaces.some(
-          (workspace) => workspace.id === requestedWorkspaceId
-        )
-          ? requestedWorkspaceId
-          : storedWorkspaceId;
-
-      selectedWorkspaceId =
-        preferredWorkspaceId &&
-        workspaces.some(
-          (workspace) => workspace.id === preferredWorkspaceId
-        )
-          ? preferredWorkspaceId
-          : workspaces[0]?.id ?? '';
-
-      workspaceContext.setWorkspaces(
-        workspaces,
-        selectedWorkspaceId
-      );
-
-      await loadMembers();
-      initialized = true;
-    } catch (err) {
-      error =
-        err instanceof ApiError
-          ? err.message
-          : 'Unable to load members.';
-    } finally {
-      loading = false;
-    }
-  }
-
-  async function loadMembers() {
-    const requestId = ++memberRequestId;
-
-    if (!selectedWorkspaceId) {
-      members = [];
-      invites = [];
-      projects = [];
-      return;
-    }
-
-    workspaceContext.setSelectedWorkspace(selectedWorkspaceId);
-
-    const [memberData, projectData] = await Promise.all([
-      listMembers(selectedWorkspaceId),
-      listProjects(selectedWorkspaceId)
-    ]);
-
-    if (requestId !== memberRequestId) {
-      return;
-    }
-
-    members = memberData.members;
-    projects = projectData.projects;
-    selectedProjectIds = [];
-
-    const context = getPermissionContext(selectedWorkspaceId);
-
-    if (canManageMembersContext(context)) {
-      const inviteData =
-        await listWorkspaceInvites(selectedWorkspaceId);
-
-      if (requestId !== memberRequestId) {
+      if (seq !== loadSeq) {
         return;
       }
 
-      invites = inviteData.invites;
-    } else {
-      invites = [];
+      workspaces = workspaceData.workspaces;
+      const requestedWorkspaceId = new URLSearchParams(
+        window.location.search
+      ).get('workspace_id');
+      const workspaceId = resolveWorkspaceId(requestedWorkspaceId);
+
+      workspaceContext.setWorkspaces(workspaces, workspaceId);
+      initialized = true;
+
+      if (!workspaceId) {
+        selectedWorkspaceId = '';
+        loading = false;
+        return;
+      }
+
+      await loadForWorkspace(workspaceId, { seq });
+    } catch (err) {
+      if (seq !== loadSeq) {
+        return;
+      }
+
+      error = memberErrorMessage(err);
+      loading = false;
+      initialized = true;
     }
   }
 
-  async function switchWorkspace(workspaceId: string) {
+  async function loadForWorkspace(
+    workspaceId: string,
+    options: { updateUrl?: boolean; seq?: number } = {}
+  ) {
+    const seq = options.seq ?? ++loadSeq;
+
+    if (!workspaceId) {
+      if (seq === loadSeq) {
+        selectedWorkspaceId = '';
+        members = [];
+        invites = [];
+        projects = [];
+        loading = false;
+      }
+      return;
+    }
+
     selectedWorkspaceId = workspaceId;
     members = [];
     invites = [];
     projects = [];
+    selectedProjectIds = [];
     showInviteForm = false;
     resetInviteForm();
     confirmation = null;
@@ -321,19 +347,58 @@
     success = '';
     loading = true;
 
-    const url = new URL(window.location.href);
-    url.searchParams.set('workspace_id', workspaceId);
-    history.replaceState(null, '', `${url.pathname}${url.search}`);
+    workspaceContext.setSelectedWorkspace(workspaceId);
+
+    if (options.updateUrl) {
+      updateWorkspaceUrl(workspaceId);
+    }
+
+    const context = getPermissionContext(workspaceId);
+    const canLoadInvites = canManageMembersContext(context);
+
+    if (import.meta.env.DEV) {
+      console.debug('[members] loading workspace', workspaceId);
+    }
 
     try {
-      await loadMembers();
+      const [memberData, projectData, inviteData] = await Promise.all([
+        listMembers(workspaceId),
+        listProjects(workspaceId),
+        canLoadInvites
+          ? listWorkspaceInvites(workspaceId)
+          : Promise.resolve({ invites: [] })
+      ]);
+
+      const currentWorkspaceId = get(workspaceContext).selectedWorkspace?.id ?? '';
+
+      if (seq !== loadSeq || selectedWorkspaceId !== workspaceId || currentWorkspaceId !== workspaceId) {
+        if (import.meta.env.DEV) {
+          console.debug('[members] ignored stale response', workspaceId);
+        }
+        return;
+      }
+
+      if (import.meta.env.DEV) {
+        console.debug('[members] response workspace', workspaceId, {
+          members: memberData.members.length,
+          invites: inviteData.invites.length,
+          projects: projectData.projects.length
+        });
+      }
+
+      members = memberData.members;
+      projects = projectData.projects;
+      invites = inviteData.invites;
     } catch (err) {
-      error =
-        err instanceof ApiError
-          ? err.message
-          : 'Unable to load members.';
+      if (seq !== loadSeq || selectedWorkspaceId !== workspaceId) {
+        return;
+      }
+
+      error = memberErrorMessage(err);
     } finally {
-      loading = false;
+      if (seq === loadSeq && selectedWorkspaceId === workspaceId) {
+        loading = false;
+      }
     }
   }
 
@@ -635,7 +700,7 @@
     Manage who can access this workspace and which projects they can see.
   </p>
 
-  {#if !loading}
+  {#if !loading && selectedWorkspaceId}
     <div class="member-summary" aria-label="Workspace access summary">
       <span>
         <strong>{activeMembers.length}</strong>
@@ -657,7 +722,7 @@
   {/if}
 </div>
 
-{#if permissionContext.access_scope === 'selected_projects'}
+{#if selectedWorkspaceId && permissionContext.access_scope === 'selected_projects'}
   <LimitedAccessNotice />
 {/if}
 
@@ -778,7 +843,7 @@
   </section>
 {/if}
 
-{#if !canManage}
+{#if !loading && selectedWorkspaceId && !canManage}
   <ReadOnlyNotice
     message="Your role can view members, but only owners and admins can manage access."
   />
@@ -793,6 +858,18 @@
     </div>
 
     <p class="loading-state">Loading members…</p>
+  </section>
+{:else if !selectedWorkspaceId}
+  <section class="directory-section">
+    <div class="directory-header">
+      <div>
+        <h2>Workspace members</h2>
+      </div>
+    </div>
+
+    <div class="empty-wrapper">
+      <EmptyState title="Select a workspace" body="Choose a workspace before reviewing members and invitations." />
+    </div>
   </section>
 {:else}
   {#if canManage && pendingInvites.length > 0}
