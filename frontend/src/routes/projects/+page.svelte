@@ -119,6 +119,12 @@
   $: recentLockfiles = lockfiles.slice(0, 6);
   $: recentPackages = packages.slice(0, 6);
   $: recentPackageVersions = packageVersions.slice(0, 6);
+  $: selectedProjectBuildReportsHref = selectedProject
+    ? `/build-reports?workspace_id=${selectedWorkspaceId}&project_id=${selectedProject.id}`
+    : '';
+  $: selectedProjectLockfilesHref = selectedProject
+    ? `/lockfiles?workspace_id=${selectedWorkspaceId}&project_id=${selectedProject.id}`
+    : '';
 
   $: successfulBuilds = buildReports.filter(
     (report) => report.status === 'success'
@@ -684,26 +690,18 @@
     class="project-form-section"
     aria-labelledby="new-project-title"
   >
-    <div class="section-heading">
+    <div class="form-section-head">
       <div>
-        <h2 id="new-project-title">
-          Create a project
-        </h2>
-
-        <p>
-          Connect a C++ project to the current workspace.
-        </p>
+        <h2 id="new-project-title">Create a project</h2>
+        <p>Connect a C++ project to the current workspace.</p>
       </div>
     </div>
 
-    <form
-      class="project-form"
-      onsubmit={handleProjectSubmit}
-    >
+    <form class="project-form" onsubmit={handleProjectSubmit}>
       <label>
-        Project name
-
+        <span>Project name</span>
         <input
+          class="field"
           bind:value={projectName}
           placeholder="Vix Runtime"
           required
@@ -712,9 +710,9 @@
       </label>
 
       <label>
-        Slug
-
+        <span>Slug</span>
         <input
+          class="field"
           value={effectiveSlug}
           placeholder="vix-runtime"
           required
@@ -724,9 +722,9 @@
       </label>
 
       <label class="repository-field">
-        Repository URL
-
+        <span>Repository URL</span>
         <input
+          class="field"
           bind:value={projectRepository}
           type="url"
           placeholder="https://github.com/vixcpp/vix"
@@ -736,12 +734,13 @@
 
       <div class="slug-preview">
         <span>Identifier</span>
+        <i class="preview-leader" aria-hidden="true"></i>
         <code>{effectiveSlug || 'project-slug'}</code>
       </div>
 
       <div class="project-form-actions">
         <button
-          class="secondary-button"
+          class="btn"
           type="button"
           disabled={savingProject}
           onclick={closeProjectForm}
@@ -750,6 +749,7 @@
         </button>
 
         <button
+          class="btn btn-primary"
           type="submit"
           disabled={
             savingProject ||
@@ -758,33 +758,25 @@
             !effectiveSlug
           }
         >
-          {savingProject
-            ? 'Creating…'
-            : 'Create project'}
+          {savingProject ? 'Creating…' : 'Create project'}
         </button>
       </div>
     </form>
   </section>
 {/if}
 
-<div class="projects-layout">
-  <aside
-    class="project-directory"
-    aria-label="Project directory"
-  >
-    <div class="directory-header">
-      <div>
-        <h2>Projects</h2>
-        <p>{selectedWorkspace?.name ?? 'Current workspace'}</p>
-      </div>
-
-      <span class="section-count">
-        {projects.length}
-      </span>
+<div class="projects-shell">
+  <!-- ============================================================== -->
+  <!-- Project rail                                                    -->
+  <!-- ============================================================== -->
+  <aside class="project-rail" aria-label="Project directory">
+    <div class="rail-head">
+      <p class="rail-label">Projects</p>
+      <span class="rail-count">{projects.length}</span>
     </div>
 
     {#if projects.length > 1}
-      <div class="project-search">
+      <div class="rail-search">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <circle cx="11" cy="11" r="7"></circle>
           <path d="m20 20-4-4"></path>
@@ -800,11 +792,9 @@
     {/if}
 
     {#if loading}
-      <p class="directory-loading">
-        Loading projects…
-      </p>
+      <p class="rail-note">Loading projects…</p>
     {:else if projects.length === 0}
-      <div class="directory-empty">
+      <div class="rail-empty">
         <EmptyState
           title="No projects yet"
           body={canCreate
@@ -813,226 +803,170 @@
         />
       </div>
     {:else if visibleProjects.length === 0}
-      <p class="directory-loading">
-        No project matches your search.
-      </p>
+      <p class="rail-note">No project matches your search.</p>
     {:else}
-      <div class="project-options">
+      <div class="rail-list">
         {#each visibleProjects as project (project.id)}
           <button
-            class:selected={
-              project.id === selectedProject?.id
-            }
-            class="project-option"
+            class:selected={project.id === selectedProject?.id}
+            class="rail-item"
             type="button"
-            aria-pressed={
-              project.id === selectedProject?.id
-            }
+            aria-pressed={project.id === selectedProject?.id}
             onclick={() => selectProject(project)}
           >
-            <span class="project-option__mark">
-              {projectInitial(project)}
-            </span>
-
-            <span class="project-option__content">
+            <span class="rail-item__copy">
               <strong>{project.name}</strong>
               <code>{project.slug}</code>
             </span>
+
+            {#if projectStatus(project) === 'archived'}
+              <span class="rail-item__flag">archived</span>
+            {/if}
           </button>
         {/each}
       </div>
     {/if}
   </aside>
 
+  <!-- ============================================================== -->
+  <!-- Detail                                                          -->
+  <!-- ============================================================== -->
   <main class="project-detail">
     {#if loading}
-      <section class="detail-section">
-        <p class="detail-loading">
-          Loading project…
-        </p>
-      </section>
+      <div class="detail-loading">Loading project…</div>
     {:else if !selectedProject}
-      <section class="detail-section empty-detail">
+      <section class="panel empty-detail">
         <EmptyState
           title="Select a project"
           body="Its builds, lockfiles and related workspace resources will appear here."
         />
       </section>
     {:else}
+      <!-- Identity bar -->
       <section
-        class="project-overview"
+        class="identity"
         aria-labelledby="selected-project-title"
       >
-        <div class="project-overview__header">
-          <div class="project-identity">
-            <span class="project-mark">
-              {projectInitial(selectedProject)}
-            </span>
+        <div class="identity__main">
+          <div class="identity__title-line">
+            <h2 id="selected-project-title">
+              {selectedProject.name}
+            </h2>
 
-            <div>
-              <div class="project-name-line">
-                <h2 id="selected-project-title">
-                  {selectedProject.name}
-                </h2>
+            <StatusBadge status={projectStatus(selectedProject)} />
 
-                <StatusBadge status={projectStatus(selectedProject)} />
-
-                {#if !canCreate}
-                  <span class="neutral-badge">
-                    Read only
-                  </span>
-                {/if}
-              </div>
-
-              <code>{selectedProject.slug}</code>
-            </div>
+            {#if !canCreate}
+              <span class="badge no-dot">Read only</span>
+            {/if}
           </div>
 
-          <div class="project-header-actions">
-            {#if canCreate}
-              {#if projectStatus(selectedProject) === 'archived'}
-                <button
-                  class="secondary-button"
-                  type="button"
-                  disabled={busyProjectAction}
-                  onclick={() => handleProjectAction('reactivate')}
-                >
-                  Reactivate
-                </button>
-              {:else}
-                <button
-                  class="secondary-button"
-                  type="button"
-                  disabled={busyProjectAction}
-                  onclick={() => handleProjectAction('archive')}
-                >
-                  Archive
-                </button>
-              {/if}
+          <div class="identity__meta">
+            <code class="identity__slug">{selectedProject.slug}</code>
 
+            <span class="identity__sep" aria-hidden="true"></span>
+
+            <span class="identity__branch">
+              {selectedProject.default_branch || 'main'}
+            </span>
+
+            <span class="identity__sep" aria-hidden="true"></span>
+
+            <button
+              class:copied={copiedProjectId}
+              class="id-chip"
+              type="button"
+              title={copiedProjectId ? 'Copied' : 'Copy project ID'}
+              onclick={copyProjectId}
+            >
+              <code>{shortId(selectedProject.id, 14)}</code>
+
+              {#if copiedProjectId}
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="m5 12 4 4L19 6"></path>
+                </svg>
+              {:else}
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="8" y="8" width="11" height="11" rx="2"></rect>
+                  <path
+                    d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"
+                  ></path>
+                </svg>
+              {/if}
+            </button>
+          </div>
+        </div>
+
+        <div class="identity__actions">
+          {#if canCreate}
+            {#if projectStatus(selectedProject) === 'archived'}
               <button
-                class="danger-button"
+                class="btn"
                 type="button"
                 disabled={busyProjectAction}
-                onclick={() => handleProjectAction('delete')}
+                onclick={() => handleProjectAction('reactivate')}
               >
-                Delete
+                Reactivate
+              </button>
+            {:else}
+              <button
+                class="btn"
+                type="button"
+                disabled={busyProjectAction}
+                onclick={() => handleProjectAction('archive')}
+              >
+                Archive
               </button>
             {/if}
 
-            <a
-              class="primary-link"
-              href={`/build-reports?workspace_id=${selectedWorkspaceId}&project_id=${selectedProject.id}`}
+            <button
+              class="btn btn-danger"
+              type="button"
+              disabled={busyProjectAction}
+              onclick={() => handleProjectAction('delete')}
             >
-              View build reports
+              Delete
+            </button>
+          {/if}
 
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="m9 18 6-6-6-6"></path>
-              </svg>
-            </a>
-          </div>
-        </div>
-
-        <dl class="project-summary">
-          <div>
-            <dt>Default branch</dt>
-            <dd>
-              {selectedProject.default_branch || 'main'}
-            </dd>
-          </div>
-
-          <div>
-            <dt>Build reports</dt>
-            <dd>{buildReports.length}</dd>
-          </div>
-
-          <div>
-            <dt>Successful</dt>
-            <dd>{successfulBuilds}</dd>
-          </div>
-
-          <div>
-            <dt>Failed</dt>
-            <dd>{failedBuilds}</dd>
-          </div>
-
-          <div>
-            <dt>Lockfiles</dt>
-            <dd>{lockfiles.length}</dd>
-          </div>
-        </dl>
-
-        <div class="project-id-row">
-          <span>Project ID</span>
-
-          <code>{selectedProject.id}</code>
-
-          <button
-            class:copied={copiedProjectId}
-            class="copy-id-button"
-            type="button"
-            aria-label={
-              copiedProjectId
-                ? 'Project ID copied'
-                : 'Copy project ID'
-            }
-            title={
-              copiedProjectId
-                ? 'Copied'
-                : 'Copy project ID'
-            }
-            onclick={copyProjectId}
-          >
-            {#if copiedProjectId}
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="m5 12 4 4L19 6"></path>
-              </svg>
-            {:else}
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <rect
-                  x="8"
-                  y="8"
-                  width="11"
-                  height="11"
-                  rx="2"
-                ></rect>
-
-                <path
-                  d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"
-                ></path>
-              </svg>
-            {/if}
-          </button>
-        </div>
-
-        <nav
-          class="project-links"
-          aria-label="Project resources"
-        >
           <a
+            class="btn btn-primary"
             href={`/build-reports?workspace_id=${selectedWorkspaceId}&project_id=${selectedProject.id}`}
           >
             Build reports
-          </a>
 
-          <a
-            href={`/lockfiles?workspace_id=${selectedWorkspaceId}&project_id=${selectedProject.id}`}
-          >
-            Lockfiles
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m9 18 6-6-6-6"></path>
+            </svg>
           </a>
+        </div>
+      </section>
 
-          <a
-            href={`/packages?workspace_id=${selectedWorkspaceId}`}
-          >
-            Workspace packages
-          </a>
+      <!-- Metrics strip -->
+      <section class="metrics" aria-label="Project statistics">
+        <div class="metric">
+          <small>Build reports</small>
+          <strong>{buildReports.length}</strong>
+        </div>
 
-          <a
-            href={`/package-versions?workspace_id=${selectedWorkspaceId}`}
-          >
-            Package versions
-          </a>
-        </nav>
+        <div class="metric">
+          <small>Successful</small>
+          <strong class="is-ok">{successfulBuilds}</strong>
+        </div>
+
+        <div class="metric">
+          <small>Failed</small>
+          <strong class:is-bad={failedBuilds > 0}>{failedBuilds}</strong>
+        </div>
+
+        <div class="metric">
+          <small>Lockfiles</small>
+          <strong>{lockfiles.length}</strong>
+        </div>
+
+        <div class="metric">
+          <small>Packages</small>
+          <strong>{packages.length}</strong>
+        </div>
       </section>
 
       {#if !canCreate}
@@ -1041,172 +975,159 @@
         />
       {/if}
 
-      <div class="project-content-grid">
+      <!-- Resource grid -->
+      <div class="resource-grid">
         <div class="primary-column">
-          <section
-            class="detail-section"
-            aria-labelledby="build-reports-title"
-          >
-            <div class="section-header">
+          <!-- Build reports -->
+          <section class="panel" aria-labelledby="build-reports-title">
+            <header class="panel__head">
               <div>
-                <h2 id="build-reports-title">
-                  Recent build reports
-                </h2>
-
-                <p>
-                  Latest recorded builds for this project.
-                </p>
+                <h2 id="build-reports-title">Recent build reports</h2>
+                <p>Latest recorded builds for this project.</p>
               </div>
 
-              <div class="section-header__actions">
-                <span class="section-count">
-                  {buildReports.length}
-                </span>
-
+              <div class="panel__head-actions">
+                <span class="panel__meta">{buildReports.length}</span>
                 <a
-                  class="section-link"
+                  class="panel__link"
                   href={`/build-reports?workspace_id=${selectedWorkspaceId}&project_id=${selectedProject.id}`}
                 >
                   View all
                 </a>
               </div>
-            </div>
+            </header>
 
             {#if loadingDetail}
-              <p class="detail-loading">
-                Loading build reports…
-              </p>
+              <p class="panel-note">Loading build reports…</p>
             {:else if recentBuildReports.length === 0}
-              <div class="section-empty">
+              <div class="panel-empty">
                 <EmptyState
                   title="No build reports"
                   body="Record the first report with vix build --report."
                 />
               </div>
             {:else}
-              <div class="build-list">
-                {#each recentBuildReports as report (report.id)}
-                  <a
-                    class="build-row"
-                    href={`/build-reports?workspace_id=${selectedWorkspaceId}&project_id=${selectedProject.id}`}
-                  >
-                    <div class="build-identity">
-                      <strong>{report.target}</strong>
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Target</th>
+                      <th>Profile</th>
+                      <th class="is-right">Errors</th>
+                      <th class="is-right">Status</th>
+                    </tr>
+                  </thead>
 
-                      <span>
-                        {report.profile || 'default'}
-                      </span>
-                    </div>
-
-                    <div class="build-result">
-                      {#if report.errors_count > 0}
-                        <span class="error-count">
-                          {report.errors_count}
-                          {report.errors_count === 1
-                            ? ' error'
-                            : ' errors'}
-                        </span>
-                      {/if}
-
-                      <StatusBadge status={report.status} />
-                    </div>
-                  </a>
-                {/each}
+                  <tbody>
+                    {#each recentBuildReports as report (report.id)}
+                      <tr
+                        class="is-link"
+                        onclick={() =>
+                          selectedProjectBuildReportsHref && goto(selectedProjectBuildReportsHref)}
+                      >
+                        <td class="is-primary">{report.target}</td>
+                        <td class="cell-muted is-mono">
+                          {report.profile || 'default'}
+                        </td>
+                        <td class="is-right is-mono">
+                          {#if report.errors_count > 0}
+                            <span class="err">{report.errors_count}</span>
+                          {:else}
+                            <span class="cell-faint">0</span>
+                          {/if}
+                        </td>
+                        <td class="is-right">
+                          <StatusBadge status={report.status} />
+                        </td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
               </div>
             {/if}
           </section>
 
-          <section
-            class="detail-section"
-            aria-labelledby="lockfiles-title"
-          >
-            <div class="section-header">
+          <!-- Lockfiles -->
+          <section class="panel" aria-labelledby="lockfiles-title">
+            <header class="panel__head">
               <div>
-                <h2 id="lockfiles-title">
-                  Lockfiles
-                </h2>
-
-                <p>
-                  Dependency states uploaded for this project.
-                </p>
+                <h2 id="lockfiles-title">Lockfiles</h2>
+                <p>Dependency states uploaded for this project.</p>
               </div>
 
-              <div class="section-header__actions">
-                <span class="section-count">
-                  {lockfiles.length}
-                </span>
-
+              <div class="panel__head-actions">
+                <span class="panel__meta">{lockfiles.length}</span>
                 <a
-                  class="section-link"
+                  class="panel__link"
                   href={`/lockfiles?workspace_id=${selectedWorkspaceId}&project_id=${selectedProject.id}`}
                 >
                   View all
                 </a>
               </div>
-            </div>
+            </header>
 
             {#if loadingDetail}
-              <p class="detail-loading">
-                Loading lockfiles…
-              </p>
+              <p class="panel-note">Loading lockfiles…</p>
             {:else if recentLockfiles.length === 0}
-              <div class="section-empty">
+              <div class="panel-empty">
                 <EmptyState
                   title="No lockfiles"
                   body="Upload one with vix cloud lockfile upload."
                 />
               </div>
             {:else}
-              <div class="resource-list">
-                {#each recentLockfiles as lockfile (lockfile.id)}
-                  <a
-                    class="resource-row"
-                    href={`/lockfiles?workspace_id=${selectedWorkspaceId}&project_id=${selectedProject.id}`}
-                  >
-                    <div>
-                      <strong>
-                        {shortId(lockfile.checksum_sha256, 18)}
-                      </strong>
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Checksum</th>
+                      <th>Source</th>
+                      <th class="is-right"></th>
+                    </tr>
+                  </thead>
 
-                      <span>
-                        {lockfile.source || 'Unknown source'}
-                      </span>
-                    </div>
-
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="m9 18 6-6-6-6"></path>
-                    </svg>
-                  </a>
-                {/each}
+                  <tbody>
+                    {#each recentLockfiles as lockfile (lockfile.id)}
+                      <tr
+                        class="is-link"
+                        onclick={() =>
+                          selectedProjectLockfilesHref && goto(selectedProjectLockfilesHref)}
+                      >
+                        <td class="is-primary is-mono">
+                          {shortId(lockfile.checksum_sha256, 20)}
+                        </td>
+                        <td class="cell-muted">
+                          {lockfile.source || 'Unknown source'}
+                        </td>
+                        <td class="is-right">
+                          <svg class="row-chevron" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="m9 18 6-6-6-6"></path>
+                          </svg>
+                        </td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
               </div>
             {/if}
           </section>
         </div>
 
         <div class="secondary-column">
-          <section
-            class="detail-section"
-            aria-labelledby="packages-title"
-          >
-            <div class="section-header">
+          <!-- Packages -->
+          <section class="panel" aria-labelledby="packages-title">
+            <header class="panel__head">
               <div>
-                <h2 id="packages-title">
-                  Workspace packages
-                </h2>
-
-                <p>
-                  Private packages available to workspace projects.
-                </p>
+                <h2 id="packages-title">Workspace packages</h2>
+                <p>Private packages available to workspace projects.</p>
               </div>
 
-              <div class="section-header__actions">
-                <span class="section-count">
-                  {packages.length}
-                </span>
+              <div class="panel__head-actions">
+                <span class="panel__meta">{packages.length}</span>
 
                 {#if canPublish && !showPackageForm}
                   <button
-                    class="small-action-button"
+                    class="btn btn-primary btn-sm"
                     type="button"
                     onclick={() => {
                       showPackageForm = true;
@@ -1214,21 +1135,18 @@
                       success = '';
                     }}
                   >
-                    New package
+                    New
                   </button>
                 {/if}
               </div>
-            </div>
+            </header>
 
             {#if showPackageForm && canPublish}
-              <form
-                class="package-form"
-                onsubmit={handlePackageSubmit}
-              >
+              <form class="package-form" onsubmit={handlePackageSubmit}>
                 <label>
-                  Package name
-
+                  <span>Package name</span>
                   <input
+                    class="field"
                     bind:value={packageName}
                     placeholder="vix/package-name"
                     required
@@ -1238,7 +1156,7 @@
 
                 <div class="package-form-actions">
                   <button
-                    class="secondary-button compact-button"
+                    class="btn btn-sm"
                     type="button"
                     disabled={savingPackage}
                     onclick={closePackageForm}
@@ -1247,12 +1165,9 @@
                   </button>
 
                   <button
-                    class="compact-button"
+                    class="btn btn-primary btn-sm"
                     type="submit"
-                    disabled={
-                      savingPackage ||
-                      !packageName.trim()
-                    }
+                    disabled={savingPackage || !packageName.trim()}
                   >
                     {savingPackage ? 'Creating…' : 'Create'}
                   </button>
@@ -1261,11 +1176,9 @@
             {/if}
 
             {#if loadingDetail}
-              <p class="detail-loading">
-                Loading packages…
-              </p>
+              <p class="panel-note">Loading packages…</p>
             {:else if recentPackages.length === 0}
-              <div class="section-empty">
+              <div class="panel-empty">
                 <EmptyState
                   title="No packages"
                   body={canPublish
@@ -1274,89 +1187,75 @@
                 />
               </div>
             {:else}
-              <div class="resource-list">
+              <div class="list">
                 {#each recentPackages as pkg (pkg.id)}
                   <a
-                    class="resource-row"
+                    class="list-row"
                     href={`/packages?workspace_id=${selectedWorkspaceId}`}
                   >
-                    <div>
+                    <span class="list-row__copy">
                       <strong>{pkg.name}</strong>
-                      <span>{pkg.visibility}</span>
-                    </div>
+                      <span
+                        class={`badge ${pkg.visibility === 'public' ? 'is-yes' : 'no-dot'}`}
+                      >
+                        {pkg.visibility}
+                      </span>
+                    </span>
 
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <svg class="row-chevron" viewBox="0 0 24 24" aria-hidden="true">
                       <path d="m9 18 6-6-6-6"></path>
                     </svg>
                   </a>
                 {/each}
               </div>
 
-              <div class="section-footer">
-                <a
-                  href={`/packages?workspace_id=${selectedWorkspaceId}`}
-                >
+              <div class="panel-footer">
+                <a href={`/packages?workspace_id=${selectedWorkspaceId}`}>
                   View all packages
                 </a>
               </div>
             {/if}
           </section>
 
-          <section
-            class="detail-section"
-            aria-labelledby="versions-title"
-          >
-            <div class="section-header">
+          <!-- Versions -->
+          <section class="panel" aria-labelledby="versions-title">
+            <header class="panel__head">
               <div>
-                <h2 id="versions-title">
-                  Recent package versions
-                </h2>
-
-                <p>
-                  Versions published in the current workspace.
-                </p>
+                <h2 id="versions-title">Recent package versions</h2>
+                <p>Versions published in the current workspace.</p>
               </div>
 
-              <span class="section-count">
-                {packageVersions.length}
-              </span>
-            </div>
+              <span class="panel__meta">{packageVersions.length}</span>
+            </header>
 
             {#if loadingDetail}
-              <p class="detail-loading">
-                Loading versions…
-              </p>
+              <p class="panel-note">Loading versions…</p>
             {:else if recentPackageVersions.length === 0}
-              <div class="section-empty">
+              <div class="panel-empty">
                 <EmptyState
                   title="No versions"
                   body="Publish a package version with vix publish --cloud."
                 />
               </div>
             {:else}
-              <div class="version-list">
+              <div class="list">
                 {#each recentPackageVersions as version (version.id)}
                   <a
-                    class="version-row"
+                    class="list-row"
                     href={`/package-versions?workspace_id=${selectedWorkspaceId}`}
                   >
-                    <div>
-                      <strong>
-                        {packageNameForId(version.package_id)}
-                      </strong>
-
+                    <span class="list-row__copy">
+                      <strong>{packageNameForId(version.package_id)}</strong>
                       <code>{version.version}</code>
-                    </div>
+                    </span>
 
                     <StatusBadge status={version.status} />
                   </a>
                 {/each}
               </div>
 
-              <div class="section-footer">
-                <a
-                  href={`/package-versions?workspace_id=${selectedWorkspaceId}`}
-                >
+              <div class="panel-footer">
+                <a href={`/package-versions?workspace_id=${selectedWorkspaceId}`}>
                   View all versions
                 </a>
               </div>
@@ -1375,6 +1274,16 @@
     color: var(--text-muted);
     font-size: 13px;
     line-height: 1.6;
+  }
+
+  .success-message {
+    margin-bottom: 14px;
+    border: 1px solid var(--green-line);
+    border-radius: var(--radius-sm);
+    background: var(--green-faint);
+    color: var(--green-soft);
+    padding: 9px 13px;
+    font-size: 11.5px;
   }
 
   .new-project-button {
@@ -1399,42 +1308,120 @@
     color: var(--text);
   }
 
-  .projects-layout {
-    display: grid;
-    grid-template-columns: 270px minmax(0, 1fr);
-    gap: 16px;
-    align-items: start;
+  /* ------------------------------------------------------------------ */
+  /* Shared button system                                                */
+  /* ------------------------------------------------------------------ */
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 32px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sm);
+    background: var(--bg-elevated);
+    color: var(--text-soft);
+    padding: 0 11px;
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+      color var(--speed) var(--ease),
+      border-color var(--speed) var(--ease),
+      background var(--speed) var(--ease);
   }
 
-  /* Project creation */
+  .btn:hover:not(:disabled) {
+    border-color: var(--brand);
+    color: var(--text);
+  }
+
+  .btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  .btn-sm {
+    min-height: 28px;
+    padding: 0 9px;
+    font-size: 11px;
+  }
+
+  .btn-primary {
+    border-color: var(--brand);
+    background: var(--brand);
+    color: var(--brand-ink);
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    border-color: var(--brand-soft);
+    background: var(--brand-soft);
+    color: var(--brand-ink);
+  }
+
+  .btn-danger {
+    border-color: color-mix(in srgb, var(--danger) 45%, var(--line-strong));
+    color: var(--danger);
+  }
+
+  .btn-danger:hover:not(:disabled) {
+    border-color: var(--danger);
+    background: color-mix(in srgb, var(--danger) 12%, transparent);
+    color: var(--danger);
+  }
+
+  .btn svg {
+    width: 14px;
+    height: 14px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Fields                                                              */
+  /* ------------------------------------------------------------------ */
+
+  .field {
+    width: 100%;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sm);
+    background: var(--bg-ink-soft);
+    color: var(--text);
+    padding: 8px 11px;
+    font-size: 12px;
+    font-family: inherit;
+    transition: border-color var(--speed) var(--ease);
+  }
+
+  .field:focus {
+    outline: none;
+    border-color: var(--brand);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Project creation form                                               */
+  /* ------------------------------------------------------------------ */
 
   .project-form-section {
     display: grid;
-    gap: 17px;
+    gap: 16px;
     margin-bottom: 18px;
     border: 1px solid var(--brand-line);
+    border-left: 2px solid var(--brand);
     border-radius: var(--radius-md);
     background: var(--bg-panel);
     padding: 18px;
   }
 
-  .section-heading {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 16px;
-  }
-
-  .section-heading > div {
-    display: grid;
-    gap: 4px;
-  }
-
-  .section-heading h2 {
+  .form-section-head h2 {
     font-size: 14px;
   }
 
-  .section-heading p {
+  .form-section-head p {
+    margin-top: 3px;
     color: var(--text-muted);
     font-size: 12px;
   }
@@ -1443,6 +1430,17 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 14px;
+  }
+
+  .project-form label {
+    display: grid;
+    gap: 5px;
+  }
+
+  .project-form label > span {
+    color: var(--text-muted);
+    font-size: 10.5px;
+    font-weight: 550;
   }
 
   .repository-field,
@@ -1454,10 +1452,22 @@
   .slug-preview {
     display: flex;
     min-width: 0;
-    align-items: center;
-    gap: 8px;
-    color: var(--text-muted);
-    font-size: 11.5px;
+    align-items: baseline;
+    gap: 9px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+
+  .slug-preview > span {
+    color: var(--text-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .preview-leader {
+    flex: 1;
+    border-bottom: 1px dotted var(--line-strong);
+    transform: translateY(-3px);
   }
 
   .slug-preview code {
@@ -1473,21 +1483,22 @@
     padding-top: 14px;
   }
 
-  .secondary-button {
-    border-color: var(--line-strong);
-    background: transparent;
-    color: var(--text-soft);
+  /* ------------------------------------------------------------------ */
+  /* Shell                                                               */
+  /* ------------------------------------------------------------------ */
+
+  .projects-shell {
+    display: grid;
+    grid-template-columns: 244px minmax(0, 1fr);
+    gap: 18px;
+    align-items: start;
   }
 
-  .secondary-button:hover:not(:disabled) {
-    border-color: rgba(255, 255, 255, 0.18);
-    background: var(--bg-elevated);
-    color: var(--text);
-  }
+  /* ------------------------------------------------------------------ */
+  /* Project rail                                                        */
+  /* ------------------------------------------------------------------ */
 
-  /* Project directory */
-
-  .project-directory {
+  .project-rail {
     position: sticky;
     top: 24px;
     min-width: 0;
@@ -1497,63 +1508,42 @@
     overflow: hidden;
   }
 
-  .directory-header,
-  .section-header {
+  .rail-head {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
-    gap: 14px;
-    padding: 14px 15px;
     border-bottom: 1px solid var(--line-soft);
+    padding: 12px 14px;
   }
 
-  .directory-header > div,
-  .section-header > div:first-child {
-    display: grid;
-    min-width: 0;
-    gap: 3px;
+  .rail-label {
+    color: var(--text-faint);
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
   }
 
-  .directory-header h2,
-  .section-header h2 {
-    font-size: 13px;
-  }
-
-  .directory-header p,
-  .section-header p {
+  .rail-count {
     color: var(--text-muted);
-    font-size: 11px;
-    line-height: 1.45;
-  }
-
-  .section-count {
-    display: inline-grid;
-    min-width: 24px;
-    height: 22px;
-    place-items: center;
-    border: 1px solid var(--line-strong);
-    border-radius: 999px;
-    background: var(--bg-elevated);
-    color: var(--text-muted);
-    padding: 0 7px;
     font-family: var(--font-mono);
     font-size: 10.5px;
   }
 
-  .project-search {
+  .rail-search {
     position: relative;
-    padding: 10px;
     border-bottom: 1px solid var(--line-soft);
+    padding: 10px;
   }
 
-  .project-search svg {
+  .rail-search svg {
     position: absolute;
     top: 50%;
     left: 21px;
     width: 14px;
     height: 14px;
     fill: none;
-    stroke: var(--text-muted);
+    stroke: var(--text-faint);
     stroke-width: 1.7;
     stroke-linecap: round;
     stroke-linejoin: round;
@@ -1561,104 +1551,111 @@
     pointer-events: none;
   }
 
-  .project-search input {
-    min-height: 34px;
-    padding-left: 33px;
+  .rail-search input {
+    width: 100%;
+    min-height: 32px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sm);
+    background: var(--bg-ink-soft);
+    color: var(--text);
+    padding: 0 10px 0 32px;
     font-size: 12px;
+    font-family: inherit;
   }
 
-  .project-options {
+  .rail-search input:focus {
+    outline: none;
+    border-color: var(--brand);
+  }
+
+  .rail-list {
     display: grid;
-    max-height: calc(100vh - 220px);
+    max-height: calc(100vh - 200px);
     overflow-y: auto;
   }
 
-  .project-option {
-    display: grid;
-    grid-template-columns: 30px minmax(0, 1fr);
-    gap: 9px;
+  .rail-item {
+    display: flex;
     align-items: center;
+    justify-content: space-between;
+    gap: 8px;
     width: 100%;
-    min-height: 56px;
-    padding: 9px 11px;
+    min-height: 50px;
     border: 0;
     border-bottom: 1px solid var(--line-soft);
+    border-left: 2px solid transparent;
     border-radius: 0;
     background: transparent;
     color: var(--text);
+    padding: 8px 13px;
     text-align: left;
+    cursor: pointer;
+    transition: background var(--speed) var(--ease);
   }
 
-  .project-option:last-child {
+  .rail-item:last-child {
     border-bottom: 0;
   }
 
-  .project-option:hover:not(:disabled) {
+  .rail-item:hover:not(:disabled) {
     background: var(--bg-elevated);
   }
 
-  .project-option.selected {
+  .rail-item.selected {
+    border-left-color: var(--brand);
     background: var(--brand-faint);
-    box-shadow: inset 2px 0 0 var(--brand);
   }
 
-  .project-option__mark {
-    display: grid;
-    width: 30px;
-    height: 30px;
-    place-items: center;
-    border: 1px solid var(--line-strong);
-    border-radius: var(--radius-sm);
-    background: var(--bg-elevated);
-    color: var(--text-soft);
-    font-size: 11px;
-    font-weight: 650;
-  }
-
-  .project-option.selected .project-option__mark {
-    border-color: var(--brand-line);
-    background: var(--brand-faint);
-    color: var(--brand-bright);
-  }
-
-  .project-option__content {
+  .rail-item__copy {
     display: grid;
     min-width: 0;
     gap: 2px;
   }
 
-  .project-option__content strong {
+  .rail-item__copy strong {
     overflow: hidden;
-    color: var(--text);
+    color: var(--text-soft);
     font-size: 12px;
     font-weight: 600;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .project-option.selected .project-option__content strong {
+  .rail-item.selected .rail-item__copy strong {
     color: var(--brand-bright);
   }
 
-  .project-option__content code {
+  .rail-item__copy code {
     overflow: hidden;
     color: var(--text-muted);
+    font-family: var(--font-mono);
     font-size: 9.5px;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .directory-loading {
-    padding: 18px 14px;
+  .rail-item__flag {
+    flex: 0 0 auto;
+    color: var(--text-faint);
+    font-family: var(--font-mono);
+    font-size: 8.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .rail-note {
+    padding: 16px 14px;
     color: var(--text-muted);
     font-size: 12px;
   }
 
-  .directory-empty {
+  .rail-empty {
     padding: 10px;
   }
 
-  /* Project overview */
+  /* ------------------------------------------------------------------ */
+  /* Detail column                                                       */
+  /* ------------------------------------------------------------------ */
 
   .project-detail {
     display: grid;
@@ -1666,252 +1663,187 @@
     gap: 16px;
   }
 
-  .project-overview,
-  .detail-section {
+  .detail-loading {
+    min-height: 120px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--bg-panel);
+    color: var(--text-muted);
+    font-size: 12px;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Identity bar                                                        */
+  /* ------------------------------------------------------------------ */
+
+  .identity {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--bg-panel);
+    padding: 15px 17px;
+  }
+
+  .identity__main {
+    display: grid;
     min-width: 0;
+    gap: 8px;
+  }
+
+  .identity__title-line {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .identity__title-line h2 {
+    color: var(--text);
+    font-size: 17px;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+    overflow-wrap: anywhere;
+  }
+
+  .identity__meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .identity__slug {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+
+  .identity__branch {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+
+  .identity__branch::before {
+    content: '⎇ ';
+    color: var(--text-faint);
+  }
+
+  .identity__sep {
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: var(--line-strong);
+  }
+
+  .id-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sm);
+    background: var(--bg-ink-soft);
+    color: var(--text-muted);
+    padding: 3px 8px;
+    cursor: pointer;
+    transition:
+      color var(--speed) var(--ease),
+      border-color var(--speed) var(--ease);
+  }
+
+  .id-chip:hover {
+    border-color: var(--brand);
+    color: var(--text-soft);
+  }
+
+  .id-chip.copied {
+    border-color: var(--brand-line);
+    color: var(--brand);
+  }
+
+  .id-chip code {
+    font-family: var(--font-mono);
+    font-size: 10px;
+  }
+
+  .id-chip svg {
+    width: 12px;
+    height: 12px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.9;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .identity__actions {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Metrics strip                                                       */
+  /* ------------------------------------------------------------------ */
+
+  .metrics {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     border: 1px solid var(--line);
     border-radius: var(--radius-md);
     background: var(--bg-panel);
     overflow: hidden;
   }
 
-  .project-overview__header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 18px;
-    padding: 16px;
-    border-bottom: 1px solid var(--line-soft);
-  }
-
-  .project-identity {
-    display: flex;
-    min-width: 0;
-    align-items: center;
-    gap: 11px;
-  }
-
-  .project-mark {
+  .metric {
     display: grid;
-    width: 40px;
-    height: 40px;
-    flex: 0 0 auto;
-    place-items: center;
-    border: 1px solid var(--line-strong);
-    border-radius: var(--radius-sm);
-    background: var(--bg-elevated);
-    color: var(--text-soft);
-    font-size: 14px;
-    font-weight: 650;
-  }
-
-  .project-identity > div {
-    display: grid;
-    min-width: 0;
-    gap: 4px;
-  }
-
-  .project-name-line {
-    display: flex;
-    min-width: 0;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .project-name-line h2 {
-    color: var(--text);
-    font-size: 16px;
-    font-weight: 600;
-    overflow-wrap: anywhere;
-  }
-
-  .project-identity code {
-    color: var(--text-muted);
-    font-size: 10.5px;
-  }
-
-  .neutral-badge {
-    display: inline-flex;
-    min-height: 20px;
-    align-items: center;
-    border: 1px solid var(--line-strong);
-    border-radius: 999px;
-    background: var(--bg-elevated);
-    color: var(--text-muted);
-    padding: 0 7px;
-    font-size: 10px;
-  }
-
-
-  .project-header-actions {
-    display: flex;
-    flex: 0 0 auto;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 8px;
-  }
-
-  .project-header-actions button {
-    min-height: 34px;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-sm);
-    background: var(--bg-elevated);
-    padding: 0 10px;
-    color: var(--text-strong);
-    font-size: 12px;
-    font-weight: 700;
-    cursor: pointer;
-  }
-
-  .project-header-actions button:disabled {
-    cursor: wait;
-    opacity: 0.65;
-  }
-
-  .project-header-actions .danger-button {
-    border-color: color-mix(in srgb, var(--danger) 55%, var(--line));
-    background: color-mix(in srgb, var(--danger) 12%, transparent);
-    color: var(--danger);
-  }
-
-  .primary-link,
-  .section-link,
-  .project-links a,
-  .section-footer a {
-    color: var(--link);
-    font-weight: 550;
-  }
-
-  .primary-link:hover,
-  .section-link:hover,
-  .project-links a:hover,
-  .section-footer a:hover {
-    color: var(--link-hover);
-  }
-
-  .primary-link {
-    display: inline-flex;
-    flex: 0 0 auto;
-    align-items: center;
-    gap: 5px;
-    font-size: 11.5px;
-  }
-
-  .primary-link svg,
-  .resource-row > svg {
-    width: 15px;
-    height: 15px;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 1.7;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
-
-  .project-summary {
-    display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    margin: 0;
-    border-bottom: 1px solid var(--line-soft);
-  }
-
-  .project-summary > div {
-    display: grid;
-    min-width: 0;
-    gap: 4px;
-    padding: 12px 14px;
+    gap: 6px;
     border-right: 1px solid var(--line-soft);
+    padding: 13px 16px;
   }
 
-  .project-summary > div:last-child {
+  .metric:last-child {
     border-right: 0;
   }
 
-  .project-summary dt {
+  .metric small {
     color: var(--text-muted);
-    font-size: 10.5px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
   }
 
-  .project-summary dd {
-    margin: 0;
-    color: var(--text-soft);
-    font-size: 12px;
-    font-weight: 550;
-    overflow-wrap: anywhere;
-  }
-
-  .project-id-row {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) 30px;
-    gap: 10px;
-    align-items: center;
-    padding: 10px 14px;
-    border-bottom: 1px solid var(--line-soft);
-  }
-
-  .project-id-row > span {
-    color: var(--text-muted);
-    font-size: 10.5px;
-  }
-
-  .project-id-row > code {
-    min-width: 0;
-    overflow: hidden;
-    color: var(--text-soft);
-    font-size: 10.5px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .copy-id-button {
-    display: grid;
-    width: 28px;
-    height: 28px;
-    min-height: 28px;
-    place-items: center;
-    border: 1px solid var(--line-strong);
-    background: transparent;
-    color: var(--text-muted);
-    padding: 0;
-  }
-
-  .copy-id-button:hover:not(:disabled) {
-    background: var(--bg-elevated);
+  .metric strong {
     color: var(--text);
+    font-size: 22px;
+    font-weight: 650;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
   }
 
-  .copy-id-button.copied {
-    border-color: var(--brand-line);
-    color: var(--brand);
+  .metric strong.is-ok {
+    color: var(--green-soft);
   }
 
-  .copy-id-button svg {
-    width: 14px;
-    height: 14px;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 1.8;
-    stroke-linecap: round;
-    stroke-linejoin: round;
+  .metric strong.is-bad {
+    color: var(--danger);
   }
 
-  .project-links {
-    display: flex;
-    align-items: center;
-    gap: 18px;
-    flex-wrap: wrap;
-    padding: 11px 14px;
-  }
+  /* ------------------------------------------------------------------ */
+  /* Resource grid                                                       */
+  /* ------------------------------------------------------------------ */
 
-  .project-links a {
-    font-size: 11.5px;
-  }
-
-  /* Project content */
-
-  .project-content-grid {
+  .resource-grid {
     display: grid;
     grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.85fr);
     gap: 16px;
@@ -1925,148 +1857,300 @@
     gap: 16px;
   }
 
-  .section-header__actions {
+  /* ------------------------------------------------------------------ */
+  /* Panels                                                              */
+  /* ------------------------------------------------------------------ */
+
+  .panel {
+    min-width: 0;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--bg-panel);
+    overflow: hidden;
+  }
+
+  .empty-detail {
+    padding: 16px;
+  }
+
+  .panel__head {
     display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+    border-bottom: 1px solid var(--line-soft);
+    padding: 13px 16px;
+  }
+
+  .panel__head h2 {
+    font-size: 13px;
+    font-weight: 650;
+  }
+
+  .panel__head p {
+    margin-top: 2px;
+    color: var(--text-muted);
+    font-size: 11px;
+  }
+
+  .panel__head-actions {
+    display: flex;
+    flex: 0 0 auto;
     align-items: center;
     gap: 10px;
-    flex: 0 0 auto;
   }
 
-  .section-link {
+  .panel__meta {
+    color: var(--text-faint);
+    font-family: var(--font-mono);
+    font-size: 10px;
+  }
+
+  .panel__link {
+    color: var(--link);
     font-size: 11px;
+    font-weight: 600;
   }
 
-  .small-action-button {
-    min-height: 28px;
-    border-color: var(--brand-line);
-    background: var(--brand-faint);
-    color: var(--brand-bright);
-    padding: 0 9px;
-    font-size: 11px;
+  .panel__link:hover {
+    color: var(--link-hover);
+    text-decoration: underline;
+    text-underline-offset: 3px;
   }
 
-  .small-action-button:hover:not(:disabled) {
-    border-color: var(--brand);
-    background: rgba(249, 115, 22, 0.17);
-    color: var(--brand-bright);
+  .panel-note {
+    min-height: 60px;
+    padding: 18px 16px;
+    color: var(--text-muted);
+    font-size: 12px;
   }
 
-  /* Build reports */
-
-  .build-list,
-  .resource-list,
-  .version-list {
-    display: grid;
+  .panel-empty {
+    padding: 11px;
   }
 
-  .build-row,
-  .resource-row,
-  .version-row {
-    min-width: 0;
+  .panel-footer {
+    display: flex;
+    justify-content: flex-end;
+    border-top: 1px solid var(--line-soft);
+    padding: 9px 16px;
+  }
+
+  .panel-footer a {
+    color: var(--link);
+    font-size: 10.5px;
+    font-weight: 600;
+  }
+
+  .panel-footer a:hover {
+    color: var(--link-hover);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Data table                                                          */
+  /* ------------------------------------------------------------------ */
+
+  .table-wrap {
+    overflow-x: auto;
+  }
+
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .data-table th {
     border-bottom: 1px solid var(--line-soft);
+    background: var(--bg-ink-soft);
+    color: var(--text-faint);
+    padding: 8px 16px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.11em;
+    text-align: left;
+    text-transform: uppercase;
+    white-space: nowrap;
   }
 
-  .build-row:last-child,
-  .resource-row:last-child,
-  .version-row:last-child {
+  .data-table td {
+    border-bottom: 1px solid var(--line-soft);
+    color: var(--text-muted);
+    padding: 11px 16px;
+    font-size: 11.5px;
+    white-space: nowrap;
+  }
+
+  .data-table tbody tr:last-child td {
     border-bottom: 0;
   }
 
-  .build-row {
-    display: flex;
-    min-height: 56px;
-    align-items: center;
-    justify-content: space-between;
-    gap: 14px;
-    padding: 10px 15px;
+  .data-table tbody tr.is-link {
+    cursor: pointer;
   }
 
-  .build-row:hover,
-  .resource-row:hover,
-  .version-row:hover {
-    background: var(--info-faint);
+  .data-table tbody tr.is-link:hover td {
+    background: var(--bg-elevated);
   }
 
-  .build-identity {
-    display: grid;
-    min-width: 0;
-    gap: 2px;
-  }
-
-  .build-identity strong {
-    color: var(--link);
-    font-size: 12px;
+  .data-table .is-primary {
+    color: var(--text-soft);
     font-weight: 600;
-    overflow-wrap: anywhere;
   }
 
-  .build-row:hover .build-identity strong {
-    color: var(--link-hover);
-  }
-
-  .build-identity span {
-    color: var(--text-muted);
-    font-size: 10.5px;
-  }
-
-  .build-result {
-    display: flex;
-    flex: 0 0 auto;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 8px;
-  }
-
-  .error-count {
-    color: var(--danger);
-    font-size: 10.5px;
-    font-weight: 550;
-  }
-
-  /* Lockfiles and packages */
-
-  .resource-row {
-    display: flex;
-    min-height: 53px;
-    align-items: center;
-    justify-content: space-between;
-    gap: 14px;
-    padding: 9px 14px;
+  .data-table tbody tr.is-link:hover .is-primary {
     color: var(--link);
   }
 
-  .resource-row > div {
-    display: grid;
-    min-width: 0;
-    gap: 2px;
+  .is-right {
+    text-align: right;
   }
 
-  .resource-row strong {
-    color: var(--link);
+  .is-mono {
     font-family: var(--font-mono);
     font-size: 10.5px;
-    font-weight: 550;
-    overflow-wrap: anywhere;
   }
 
-  .resource-row:hover strong {
-    color: var(--link-hover);
-  }
-
-  .resource-row span {
+  .cell-muted {
     color: var(--text-muted);
-    font-size: 10.5px;
+  }
+
+  .cell-faint {
+    color: var(--text-faint);
+  }
+
+  .err {
+    color: var(--danger);
+    font-weight: 600;
+  }
+
+  .row-chevron {
+    width: 14px;
+    height: 14px;
+    fill: none;
+    stroke: var(--text-faint);
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Badges                                                              */
+  /* ------------------------------------------------------------------ */
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sm);
+    background: var(--bg-elevated);
+    color: var(--text-muted);
+    padding: 2px 7px;
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    font-weight: 600;
+    white-space: nowrap;
     text-transform: capitalize;
   }
 
-  /* Package form */
+  .badge::before {
+    content: '';
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--text-faint);
+  }
+
+  .badge.no-dot::before {
+    display: none;
+  }
+
+  .badge.is-yes {
+    border-color: var(--green-line);
+    background: var(--green-faint);
+    color: var(--green-soft);
+  }
+
+  .badge.is-yes::before {
+    background: var(--green-soft);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Package / version lists                                             */
+  /* ------------------------------------------------------------------ */
+
+  .list {
+    display: grid;
+  }
+
+  .list-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 50px;
+    border-bottom: 1px solid var(--line-soft);
+    padding: 9px 15px;
+    transition: background var(--speed) var(--ease);
+  }
+
+  .list-row:last-child {
+    border-bottom: 0;
+  }
+
+  .list-row:hover {
+    background: var(--bg-elevated);
+  }
+
+  .list-row__copy {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .list-row__copy strong {
+    overflow: hidden;
+    color: var(--link);
+    font-size: 11.5px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .list-row:hover .list-row__copy strong {
+    color: var(--link-hover);
+  }
+
+  .list-row__copy code {
+    flex: 0 0 auto;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 10px;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Package form                                                        */
+  /* ------------------------------------------------------------------ */
 
   .package-form {
     display: grid;
     gap: 11px;
-    padding: 13px 14px;
     border-bottom: 1px solid var(--line-soft);
     background: var(--bg-ink-soft);
+    padding: 13px 15px;
+  }
+
+  .package-form label {
+    display: grid;
+    gap: 5px;
+  }
+
+  .package-form label > span {
+    color: var(--text-muted);
+    font-size: 10.5px;
+    font-weight: 550;
   }
 
   .package-form-actions {
@@ -2075,85 +2159,12 @@
     gap: 7px;
   }
 
-  .compact-button {
-    min-height: 30px;
-    padding: 0 11px;
-    font-size: 12px;
-  }
-
-  /* Versions */
-
-  .version-row {
-    display: flex;
-    min-height: 52px;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 9px 14px;
-  }
-
-  .version-row > div {
-    display: grid;
-    min-width: 0;
-    gap: 2px;
-  }
-
-  .version-row strong {
-    color: var(--link);
-    font-size: 11.5px;
-    font-weight: 550;
-    overflow-wrap: anywhere;
-  }
-
-  .version-row:hover strong {
-    color: var(--link-hover);
-  }
-
-  .version-row code {
-    color: var(--text-muted);
-    font-size: 10px;
-  }
-
-  .section-footer {
-    display: flex;
-    justify-content: flex-end;
-    border-top: 1px solid var(--line-soft);
-    padding: 9px 14px;
-  }
-
-  .section-footer a {
-    font-size: 10.5px;
-  }
-
-  .section-empty {
-    padding: 11px;
-  }
-
-  .detail-loading {
-    min-height: 72px;
-    padding: 20px 15px;
-    color: var(--text-muted);
-    font-size: 12px;
-  }
-
-  .empty-detail {
-    padding: 14px;
-  }
+  /* ------------------------------------------------------------------ */
+  /* Responsive                                                          */
+  /* ------------------------------------------------------------------ */
 
   @media (max-width: 1080px) {
-    .project-summary {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-
-    .project-summary > div:nth-child(3) {
-      border-right: 0;
-    }
-
-    .project-summary > div:nth-child(-n + 3) {
-      border-bottom: 1px solid var(--line-soft);
-    }
-
-    .project-content-grid {
+    .resource-grid {
       grid-template-columns: 1fr;
     }
 
@@ -2163,16 +2174,16 @@
   }
 
   @media (max-width: 880px) {
-    .projects-layout {
+    .projects-shell {
       grid-template-columns: 1fr;
     }
 
-    .project-directory {
+    .project-rail {
       position: static;
     }
 
-    .project-options {
-      max-height: 280px;
+    .rail-list {
+      max-height: 260px;
     }
   }
 
@@ -2187,43 +2198,29 @@
       grid-column: auto;
     }
 
-    .project-overview__header {
+    .identity {
       align-items: flex-start;
       flex-direction: column;
     }
 
-    .project-header-actions {
+    .identity__actions {
       justify-content: flex-start;
     }
 
-    .project-summary {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+    .metrics {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
-    .project-summary > div,
-    .project-summary > div:nth-child(3) {
-      border-right: 1px solid var(--line-soft);
-      border-bottom: 1px solid var(--line-soft);
-    }
-
-    .project-summary > div:nth-child(even) {
+    .metric:nth-child(3n) {
       border-right: 0;
     }
 
-    .project-summary > div:last-child {
-      border-bottom: 0;
+    .metric:nth-child(n + 4) {
+      border-top: 1px solid var(--line-soft);
     }
 
     .secondary-column {
       grid-template-columns: 1fr;
-    }
-
-    .project-id-row {
-      grid-template-columns: 1fr 30px;
-    }
-
-    .project-id-row > span {
-      grid-column: 1 / -1;
     }
   }
 
@@ -2233,45 +2230,37 @@
     }
 
     .project-form-actions {
-      align-items: stretch;
       flex-direction: column-reverse;
     }
 
-    .project-form-actions button {
+    .project-form-actions .btn {
       width: 100%;
+      justify-content: center;
     }
 
-    .project-summary {
-      grid-template-columns: 1fr;
+    .metrics {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .project-summary > div,
-    .project-summary > div:nth-child(even) {
+    .metric:nth-child(3n) {
+      border-right: 1px solid var(--line-soft);
+    }
+
+    .metric:nth-child(2n) {
       border-right: 0;
     }
 
-    .project-links {
-      align-items: flex-start;
-      flex-direction: column;
-      gap: 9px;
-    }
-
-    .build-row {
-      align-items: flex-start;
-      flex-direction: column;
-    }
-
-    .build-result {
-      justify-content: flex-start;
+    .metric:nth-child(n + 3) {
+      border-top: 1px solid var(--line-soft);
     }
 
     .package-form-actions {
-      align-items: stretch;
       flex-direction: column-reverse;
     }
 
-    .package-form-actions button {
+    .package-form-actions .btn {
       width: 100%;
+      justify-content: center;
     }
   }
 </style>
