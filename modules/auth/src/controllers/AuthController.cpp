@@ -443,7 +443,6 @@ namespace cloud::auth::controllers
           "created_at INTEGER NOT NULL)");
     }
 
-
     void ensure_founding_supporters_table(vix::db::Database &db)
     {
       db.exec(
@@ -764,14 +763,13 @@ namespace cloud::auth::controllers
       }
     }
 
-
     void public_support_config(vix::Request &, vix::Response &res)
     {
       json_ok(res, vix::json::o(
-          "supporter_payment_url", env_value("SOFTADASTRA_SUPPORTER_PAYMENT_URL"),
-          "builder_payment_url", env_value("SOFTADASTRA_BUILDER_PAYMENT_URL"),
-          "contact_email", env_value("SOFTADASTRA_SUPPORT_CONTACT_EMAIL"),
-          "contact_url", env_value("SOFTADASTRA_SUPPORT_CONTACT_URL")));
+                       "supporter_payment_url", env_value("SOFTADASTRA_SUPPORTER_PAYMENT_URL"),
+                       "builder_payment_url", env_value("SOFTADASTRA_BUILDER_PAYMENT_URL"),
+                       "contact_email", env_value("SOFTADASTRA_SUPPORT_CONTACT_EMAIL"),
+                       "contact_url", env_value("SOFTADASTRA_SUPPORT_CONTACT_URL")));
     }
 
     void public_supporters_list(vix::Request &, vix::Response &res)
@@ -832,20 +830,19 @@ namespace cloud::auth::controllers
 
         const auto &row = rows->row();
         json_ok(res, vix::json::o(
-            "supporter", vix::json::o(
-                "tier", row.getString(0),
-                "status", row.getString(1),
-                "display_name", row.getString(2),
-                "started_at", row.getInt64(3),
-                "public_visible", row.getInt64(4) != 0,
-                "stronger_visibility", row.getInt64(5) != 0)));
+                         "supporter", vix::json::o(
+                                          "tier", row.getString(0),
+                                          "status", row.getString(1),
+                                          "display_name", row.getString(2),
+                                          "started_at", row.getInt64(3),
+                                          "public_visible", row.getInt64(4) != 0,
+                                          "stronger_visibility", row.getInt64(5) != 0)));
       }
       catch (...)
       {
         json_error(res, 500, "supporter_status_error", "Could not load supporter status.");
       }
     }
-
 
     struct PlatformAdminContext
     {
@@ -857,7 +854,8 @@ namespace cloud::auth::controllers
 
     std::string lower_copy(std::string value)
     {
-      std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+      std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c)
+                     { return static_cast<char>(std::tolower(c)); });
       return value;
     }
 
@@ -878,7 +876,8 @@ namespace cloud::auth::controllers
         }
         current.push_back(ch);
       }
-      if (!current.empty()) out.push_back(lower_copy(current));
+      if (!current.empty())
+        out.push_back(lower_copy(current));
       return out;
     }
 
@@ -917,9 +916,11 @@ namespace cloud::auth::controllers
       }
 
       auto rows = db.query("SELECT role, status FROM platform_admins WHERE user_id = ? LIMIT 1", user_id);
-      if (!rows->next()) return vix::json::Json{};
+      if (!rows->next())
+        return vix::json::Json{};
       const auto &row = rows->row();
-      if (row.getString(1) != "active") return vix::json::Json{};
+      if (row.getString(1) != "active")
+        return vix::json::Json{};
       return vix::json::o("role", row.getString(0));
     }
 
@@ -977,9 +978,11 @@ namespace cloud::auth::controllers
     {
       const auto now = now_timestamp();
       auto ip = req.header("X-Forwarded-For");
-      if (ip.empty()) ip = req.header("x-forwarded-for");
+      if (ip.empty())
+        ip = req.header("x-forwarded-for");
       auto ua = req.header("User-Agent");
-      if (ua.empty()) ua = req.header("user-agent");
+      if (ua.empty())
+        ua = req.header("user-agent");
       db.exec(
           "INSERT INTO admin_audit_logs (id, admin_user_id, action, target_type, target_id, metadata_json, ip_address, user_agent, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
           make_public_id("admin_audit", now), admin.user_id, action, target_type, target_id, metadata, ip, ua, now);
@@ -993,20 +996,47 @@ namespace cloud::auth::controllers
 
     std::string body_string(vix::Request &req, const std::string &key, const std::string &fallback = "")
     {
-      if (req.body().empty()) return fallback;
-      try { const auto &b = req.json(); return b.is_object() ? b.value(key, fallback) : fallback; } catch (...) { return fallback; }
+      if (req.body().empty())
+        return fallback;
+      try
+      {
+        const auto &b = req.json();
+        return b.is_object() ? b.value(key, fallback) : fallback;
+      }
+      catch (...)
+      {
+        return fallback;
+      }
     }
 
     std::int64_t body_int(vix::Request &req, const std::string &key, std::int64_t fallback = 0)
     {
-      if (req.body().empty()) return fallback;
-      try { const auto &b = req.json(); return b.is_object() && b.contains(key) ? b[key].get<std::int64_t>() : fallback; } catch (...) { return fallback; }
+      if (req.body().empty())
+        return fallback;
+      try
+      {
+        const auto &b = req.json();
+        return b.is_object() && b.contains(key) ? b[key].get<std::int64_t>() : fallback;
+      }
+      catch (...)
+      {
+        return fallback;
+      }
     }
 
     bool body_bool(vix::Request &req, const std::string &key, bool fallback = false)
     {
-      if (req.body().empty()) return fallback;
-      try { const auto &b = req.json(); return b.is_object() && b.contains(key) ? b[key].get<bool>() : fallback; } catch (...) { return fallback; }
+      if (req.body().empty())
+        return fallback;
+      try
+      {
+        const auto &b = req.json();
+        return b.is_object() && b.contains(key) ? b[key].get<bool>() : fallback;
+      }
+      catch (...)
+      {
+        return fallback;
+      }
     }
 
     bool valid_admin_feedback_status(const std::string &status)
@@ -1027,7 +1057,8 @@ namespace cloud::auth::controllers
     void admin_overview(vix::Request &req, vix::Response &res)
     {
       auto admin = require_platform_admin(req, res);
-      if (!admin.ok) return;
+      if (!admin.ok)
+        return;
       try
       {
         vix::config::Config cfg{".env"};
@@ -1072,34 +1103,24 @@ namespace cloud::auth::controllers
           audits.push_back(item);
         }
         json_ok(res, vix::json::o(
-            "platform_admin", vix::json::o("role", admin.role),
-            "stats", vix::json::o(
-                "users_count", count_table(db, "SELECT COUNT(*) FROM rix_auth_users"),
-                "active_users_count", count_table(db, "SELECT COUNT(*) FROM rix_auth_users WHERE active = 1"),
-                "workspaces_count", count_table(db, "SELECT COUNT(*) FROM workspaces"),
-                "projects_count", count_table(db, "SELECT COUNT(*) FROM projects"),
-                "packages_count", count_table(db, "SELECT COUNT(*) FROM packages"),
-                "public_packages_count", count_table(db, "SELECT COUNT(*) FROM packages WHERE visibility = 'public'"),
-                "private_packages_count", count_table(db, "SELECT COUNT(*) FROM packages WHERE visibility = 'private'"),
-                "package_versions_count", count_table(db, "SELECT COUNT(*) FROM package_versions"),
-                "lockfiles_count", count_table(db, "SELECT COUNT(*) FROM lockfiles"),
-                "build_reports_count", count_table(db, "SELECT COUNT(*) FROM build_reports"),
-                "feedback_count", count_table(db, "SELECT COUNT(*) FROM feedback_items"),
-                "open_feedback_count", count_table(db, "SELECT COUNT(*) FROM feedback_items WHERE status = 'open'"),
-                "founding_supporters_count", count_table(db, "SELECT COUNT(*) FROM founding_supporters WHERE tier = 'founding_supporter' AND status = 'active'"),
-                "founding_builders_count", count_table(db, "SELECT COUNT(*) FROM founding_supporters WHERE tier = 'founding_builder' AND status = 'active'")),
-            "recent_activity", audits,
-            "recent_feedback", recent_feedback,
-            "recent_supporters", recent_supporters));
+                         "platform_admin", vix::json::o("role", admin.role),
+                         "stats", vix::json::o("users_count", count_table(db, "SELECT COUNT(*) FROM rix_auth_users"), "active_users_count", count_table(db, "SELECT COUNT(*) FROM rix_auth_users WHERE active = 1"), "workspaces_count", count_table(db, "SELECT COUNT(*) FROM workspaces"), "projects_count", count_table(db, "SELECT COUNT(*) FROM projects"), "packages_count", count_table(db, "SELECT COUNT(*) FROM packages"), "public_packages_count", count_table(db, "SELECT COUNT(*) FROM packages WHERE visibility = 'public'"), "private_packages_count", count_table(db, "SELECT COUNT(*) FROM packages WHERE visibility = 'private'"), "package_versions_count", count_table(db, "SELECT COUNT(*) FROM package_versions"), "lockfiles_count", count_table(db, "SELECT COUNT(*) FROM lockfiles"), "build_reports_count", count_table(db, "SELECT COUNT(*) FROM build_reports"), "feedback_count", count_table(db, "SELECT COUNT(*) FROM feedback_items"), "open_feedback_count", count_table(db, "SELECT COUNT(*) FROM feedback_items WHERE status = 'open'"), "founding_supporters_count", count_table(db, "SELECT COUNT(*) FROM founding_supporters WHERE tier = 'founding_supporter' AND status = 'active'"), "founding_builders_count", count_table(db, "SELECT COUNT(*) FROM founding_supporters WHERE tier = 'founding_builder' AND status = 'active'")),
+                         "recent_activity", audits,
+                         "recent_feedback", recent_feedback,
+                         "recent_supporters", recent_supporters));
       }
-      catch (...) { json_error(res, 500, "admin_overview_error", "Could not load admin overview."); }
+      catch (...)
+      {
+        json_error(res, 500, "admin_overview_error", "Could not load admin overview.");
+      }
     }
 
     vix::json::Json module_json(const std::string &key, const std::string &name, const std::string &description, std::initializer_list<std::string> values)
     {
       auto item = vix::json::Json::object();
       auto action_list = vix::json::Json::array();
-      for (const auto &value : values) action_list.push_back(value);
+      for (const auto &value : values)
+        action_list.push_back(value);
       item["key"] = key;
       item["name"] = name;
       item["description"] = description;
@@ -1110,7 +1131,8 @@ namespace cloud::auth::controllers
     void admin_modules(vix::Request &req, vix::Response &res)
     {
       auto admin = require_platform_admin(req, res);
-      if (!admin.ok) return;
+      if (!admin.ok)
+        return;
       auto modules = vix::json::Json::array();
       modules.push_back(module_json("users", "Users", "Manage accounts, profiles and public visibility.", {"list", "view", "disable_public_profile", "view_supporter_status"}));
       modules.push_back(module_json("workspaces", "Workspaces", "Inspect workspaces, members and usage.", {"list", "view"}));
@@ -1124,7 +1146,8 @@ namespace cloud::auth::controllers
     void admin_users_list(vix::Request &req, vix::Response &res)
     {
       auto admin = require_platform_admin(req, res);
-      if (!admin.ok) return;
+      if (!admin.ok)
+        return;
       try
       {
         vix::config::Config cfg{".env"};
@@ -1141,7 +1164,8 @@ namespace cloud::auth::controllers
         {
           const auto &r = rows->row();
           const auto haystack = lower_copy(r.getString(1) + " " + r.getString(4) + " " + r.getString(5));
-          if (!search.empty() && haystack.find(search) == std::string::npos) continue;
+          if (!search.empty() && haystack.find(search) == std::string::npos)
+            continue;
           auto item = vix::json::Json::object();
           item["id"] = r.getString(0);
           item["email"] = r.getString(1);
@@ -1156,37 +1180,49 @@ namespace cloud::auth::controllers
         }
         json_ok(res, vix::json::o("users", users));
       }
-      catch (...) { json_error(res, 500, "admin_users_error", "Could not load users."); }
+      catch (...)
+      {
+        json_error(res, 500, "admin_users_error", "Could not load users.");
+      }
     }
 
     void admin_user_show(vix::Request &req, vix::Response &res)
     {
       auto admin = require_platform_admin(req, res);
-      if (!admin.ok) return;
+      if (!admin.ok)
+        return;
       const auto user_id = body_string(req, "user_id");
-      if (user_id.empty()) return json_error(res, 400, "user_required", "User is required.");
+      if (user_id.empty())
+        return json_error(res, 400, "user_required", "User is required.");
       try
       {
         vix::config::Config cfg{".env"};
         vix::db::Database db{cfg};
         auto rows = db.query("SELECT u.id,u.email,u.active,u.created_at,COALESCE(p.display_name,''),COALESCE(p.username,''),COALESCE(p.bio,''),COALESCE(p.avatar_url,''),COALESCE(p.website_url,''),COALESCE(p.github_url,''),COALESCE(p.public_profile_enabled,0) FROM rix_auth_users u LEFT JOIN user_profiles p ON p.user_id=u.id WHERE u.id=? LIMIT 1", user_id);
-        if (!rows->next()) return json_error(res, 404, "user_not_found", "User was not found.");
+        if (!rows->next())
+          return json_error(res, 404, "user_not_found", "User was not found.");
         const auto &r = rows->row();
         json_ok(res, vix::json::o(
-            "user", vix::json::o("id", r.getString(0), "email", r.getString(1), "active", r.getInt64(2)!=0, "created_at", r.getInt64(3), "display_name", r.getString(4), "username", r.getString(5), "bio", r.getString(6), "avatar_url", r.getString(7), "website_url", r.getString(8), "github_url", r.getString(9), "public_profile_enabled", r.getInt64(10)!=0),
-            "stats", vix::json::o("workspaces_count", count_table(db, "SELECT COUNT(*) FROM workspaces WHERE owner_user_id='" + user_id + "'"), "public_packages_count", count_table(db, "SELECT COUNT(*) FROM packages WHERE owner_user_id='" + user_id + "' AND visibility='public'"))));
+                         "user", vix::json::o("id", r.getString(0), "email", r.getString(1), "active", r.getInt64(2) != 0, "created_at", r.getInt64(3), "display_name", r.getString(4), "username", r.getString(5), "bio", r.getString(6), "avatar_url", r.getString(7), "website_url", r.getString(8), "github_url", r.getString(9), "public_profile_enabled", r.getInt64(10) != 0),
+                         "stats", vix::json::o("workspaces_count", count_table(db, "SELECT COUNT(*) FROM workspaces WHERE owner_user_id='" + user_id + "'"), "public_packages_count", count_table(db, "SELECT COUNT(*) FROM packages WHERE owner_user_id='" + user_id + "' AND visibility='public'"))));
       }
-      catch (...) { json_error(res, 500, "admin_user_error", "Could not load user."); }
+      catch (...)
+      {
+        json_error(res, 500, "admin_user_error", "Could not load user.");
+      }
     }
 
     void admin_user_update_profile_visibility(vix::Request &req, vix::Response &res)
     {
       auto admin = require_platform_admin(req, res, true);
-      if (!admin.ok) return;
+      if (!admin.ok)
+        return;
       const auto user_id = body_string(req, "user_id");
       const auto enabled = body_bool(req, "public_profile_enabled", false);
-      if (user_id.empty()) return json_error(res, 400, "user_required", "User is required.");
-      if (enabled) return json_error(res, 400, "unsafe_action", "Admin MVP can only disable public profiles.");
+      if (user_id.empty())
+        return json_error(res, 400, "user_required", "User is required.");
+      if (enabled)
+        return json_error(res, 400, "unsafe_action", "Admin MVP can only disable public profiles.");
       try
       {
         vix::config::Config cfg{".env"};
@@ -1196,33 +1232,60 @@ namespace cloud::auth::controllers
         admin_audit(db, req, admin, "public_profile_disabled", "user", user_id);
         json_ok(res, vix::json::o("updated", true));
       }
-      catch (...) { json_error(res, 500, "admin_user_update_error", "Could not update public profile visibility."); }
+      catch (...)
+      {
+        json_error(res, 500, "admin_user_update_error", "Could not update public profile visibility.");
+      }
     }
 
     void admin_packages_list(vix::Request &req, vix::Response &res)
     {
       auto admin = require_platform_admin(req, res);
-      if (!admin.ok) return;
+      if (!admin.ok)
+        return;
       try
       {
         vix::config::Config cfg{".env"};
         vix::db::Database db{cfg};
         auto packages = vix::json::Json::array();
         auto rows = db.query("SELECT p.id,p.workspace_id,p.owner_user_id,p.name,COALESCE(p.description,''),COALESCE(p.repository_url,''),p.visibility,p.active,p.created_at,p.updated_at,COALESCE(w.name,''),COALESCE(u.email,'') FROM packages p LEFT JOIN workspaces w ON w.id=p.workspace_id LEFT JOIN rix_auth_users u ON u.id=p.owner_user_id ORDER BY p.updated_at DESC LIMIT 100");
-        while (rows->next()) { const auto &r=rows->row(); auto item=vix::json::Json::object(); item["id"]=r.getString(0); item["workspace_id"]=r.getString(1); item["owner_user_id"]=r.getString(2); item["name"]=r.getString(3); item["description"]=r.getString(4); item["repository_url"]=r.getString(5); item["visibility"]=r.getString(6); item["active"]=r.getInt64(7)!=0; item["created_at"]=r.getInt64(8); item["updated_at"]=r.getInt64(9); item["workspace_name"]=r.getString(10); item["owner_email"]=r.getString(11); packages.push_back(item); }
+        while (rows->next())
+        {
+          const auto &r = rows->row();
+          auto item = vix::json::Json::object();
+          item["id"] = r.getString(0);
+          item["workspace_id"] = r.getString(1);
+          item["owner_user_id"] = r.getString(2);
+          item["name"] = r.getString(3);
+          item["description"] = r.getString(4);
+          item["repository_url"] = r.getString(5);
+          item["visibility"] = r.getString(6);
+          item["active"] = r.getInt64(7) != 0;
+          item["created_at"] = r.getInt64(8);
+          item["updated_at"] = r.getInt64(9);
+          item["workspace_name"] = r.getString(10);
+          item["owner_email"] = r.getString(11);
+          packages.push_back(item);
+        }
         json_ok(res, vix::json::o("packages", packages));
       }
-      catch (...) { json_error(res, 500, "admin_packages_error", "Could not load packages."); }
+      catch (...)
+      {
+        json_error(res, 500, "admin_packages_error", "Could not load packages.");
+      }
     }
 
     void admin_package_moderate(vix::Request &req, vix::Response &res)
     {
       auto admin = require_platform_admin(req, res, true);
-      if (!admin.ok) return;
+      if (!admin.ok)
+        return;
       const auto package_id = body_string(req, "package_id");
       const auto action = body_string(req, "action");
-      if (package_id.empty()) return json_error(res, 400, "package_required", "Package is required.");
-      if (action != "hide_public_package" && action != "set_private") return json_error(res, 400, "invalid_action", "Package moderation action is invalid.");
+      if (package_id.empty())
+        return json_error(res, 400, "package_required", "Package is required.");
+      if (action != "hide_public_package" && action != "set_private")
+        return json_error(res, 400, "invalid_action", "Package moderation action is invalid.");
       try
       {
         vix::config::Config cfg{".env"};
@@ -1232,49 +1295,81 @@ namespace cloud::auth::controllers
         admin_audit(db, req, admin, "package_visibility_private", "package", package_id);
         json_ok(res, vix::json::o("updated", true));
       }
-      catch (...) { json_error(res, 500, "admin_package_moderation_error", "Could not moderate package."); }
+      catch (...)
+      {
+        json_error(res, 500, "admin_package_moderation_error", "Could not moderate package.");
+      }
     }
 
     void admin_feedback_list(vix::Request &req, vix::Response &res)
     {
       auto admin = require_platform_admin(req, res);
-      if (!admin.ok) return;
+      if (!admin.ok)
+        return;
       try
       {
         vix::config::Config cfg{".env"};
         vix::db::Database db{cfg};
         auto feedback = vix::json::Json::array();
         auto rows = db.query("SELECT f.id,f.user_id,COALESCE(u.email,''),COALESCE(f.workspace_id,''),f.category,f.title,f.message,f.status,f.created_at,f.updated_at FROM feedback_items f LEFT JOIN rix_auth_users u ON u.id=f.user_id ORDER BY f.created_at DESC LIMIT 100");
-        while (rows->next()) { const auto &r=rows->row(); auto item=vix::json::Json::object(); item["id"]=r.getString(0); item["user_id"]=r.getString(1); item["user_email"]=r.getString(2); item["workspace_id"]=r.getString(3); item["category"]=r.getString(4); item["title"]=r.getString(5); item["message"]=r.getString(6); item["status"]=r.getString(7); item["created_at"]=r.getInt64(8); item["updated_at"]=r.getInt64(9); feedback.push_back(item); }
+        while (rows->next())
+        {
+          const auto &r = rows->row();
+          auto item = vix::json::Json::object();
+          item["id"] = r.getString(0);
+          item["user_id"] = r.getString(1);
+          item["user_email"] = r.getString(2);
+          item["workspace_id"] = r.getString(3);
+          item["category"] = r.getString(4);
+          item["title"] = r.getString(5);
+          item["message"] = r.getString(6);
+          item["status"] = r.getString(7);
+          item["created_at"] = r.getInt64(8);
+          item["updated_at"] = r.getInt64(9);
+          feedback.push_back(item);
+        }
         json_ok(res, vix::json::o("feedback", feedback));
       }
-      catch (...) { json_error(res, 500, "admin_feedback_error", "Could not load feedback."); }
+      catch (...)
+      {
+        json_error(res, 500, "admin_feedback_error", "Could not load feedback.");
+      }
     }
 
     void admin_feedback_update_status(vix::Request &req, vix::Response &res)
     {
       auto admin = require_platform_admin(req, res, true);
-      if (!admin.ok) return;
+      if (!admin.ok)
+        return;
       const auto feedback_id = body_string(req, "feedback_id");
       const auto status = body_string(req, "status");
-      if (feedback_id.empty()) return json_error(res, 400, "feedback_required", "Feedback is required.");
-      if (!valid_admin_feedback_status(status)) return json_error(res, 400, "invalid_status", "Feedback status is invalid.");
+      if (feedback_id.empty())
+        return json_error(res, 400, "feedback_required", "Feedback is required.");
+      if (!valid_admin_feedback_status(status))
+        return json_error(res, 400, "invalid_status", "Feedback status is invalid.");
       try
       {
         vix::config::Config cfg{".env"};
         vix::db::Database db{cfg};
         const auto now = now_timestamp();
         db.exec("UPDATE feedback_items SET status = ?, updated_at = ? WHERE id = ?", status, now, feedback_id);
-        admin_audit(db, req, admin, status == "reviewed" ? "feedback_marked_reviewed" : status == "planned" ? "feedback_marked_planned" : status == "closed" ? "feedback_closed" : "feedback_reopened", "feedback", feedback_id);
+        admin_audit(db, req, admin, status == "reviewed" ? "feedback_marked_reviewed" : status == "planned" ? "feedback_marked_planned"
+                                                                                    : status == "closed"    ? "feedback_closed"
+                                                                                                            : "feedback_reopened",
+                    "feedback", feedback_id);
         json_ok(res, vix::json::o("updated", true));
       }
-      catch (...) { json_error(res, 500, "admin_feedback_update_error", "Could not update feedback."); }
+      catch (...)
+      {
+        json_error(res, 500, "admin_feedback_update_error", "Could not update feedback.");
+      }
     }
 
     void admin_supporters_list(vix::Request &req, vix::Response &res)
     {
       auto admin = require_platform_admin(req, res);
-      if (!admin.ok) return;
+      if (!admin.ok)
+        return;
       try
       {
         vix::config::Config cfg{".env"};
@@ -1282,20 +1377,46 @@ namespace cloud::auth::controllers
         ensure_founding_supporters_table(db);
         auto supporters = vix::json::Json::array();
         auto rows = db.query("SELECT id,COALESCE(user_id,''),tier,status,display_name,COALESCE(username,''),COALESCE(project_name,''),COALESCE(website_url,''),COALESCE(github_url,''),public_visible,stronger_visibility,started_at,COALESCE(expires_at,0),created_at,updated_at FROM founding_supporters ORDER BY stronger_visibility DESC, started_at DESC LIMIT 100");
-        while (rows->next()) { const auto &r=rows->row(); auto item=vix::json::Json::object(); item["id"]=r.getString(0); item["user_id"]=r.getString(1); item["tier"]=r.getString(2); item["status"]=r.getString(3); item["display_name"]=r.getString(4); item["username"]=r.getString(5); item["project_name"]=r.getString(6); item["website_url"]=r.getString(7); item["github_url"]=r.getString(8); item["public_visible"]=r.getInt64(9)!=0; item["stronger_visibility"]=r.getInt64(10)!=0; item["started_at"]=r.getInt64(11); item["expires_at"]=r.getInt64(12); item["created_at"]=r.getInt64(13); item["updated_at"]=r.getInt64(14); supporters.push_back(item); }
+        while (rows->next())
+        {
+          const auto &r = rows->row();
+          auto item = vix::json::Json::object();
+          item["id"] = r.getString(0);
+          item["user_id"] = r.getString(1);
+          item["tier"] = r.getString(2);
+          item["status"] = r.getString(3);
+          item["display_name"] = r.getString(4);
+          item["username"] = r.getString(5);
+          item["project_name"] = r.getString(6);
+          item["website_url"] = r.getString(7);
+          item["github_url"] = r.getString(8);
+          item["public_visible"] = r.getInt64(9) != 0;
+          item["stronger_visibility"] = r.getInt64(10) != 0;
+          item["started_at"] = r.getInt64(11);
+          item["expires_at"] = r.getInt64(12);
+          item["created_at"] = r.getInt64(13);
+          item["updated_at"] = r.getInt64(14);
+          supporters.push_back(item);
+        }
         json_ok(res, vix::json::o("supporters", supporters));
       }
-      catch (...) { json_error(res, 500, "admin_supporters_error", "Could not load supporters."); }
+      catch (...)
+      {
+        json_error(res, 500, "admin_supporters_error", "Could not load supporters.");
+      }
     }
 
     void admin_supporter_create(vix::Request &req, vix::Response &res)
     {
       auto admin = require_platform_admin(req, res, true);
-      if (!admin.ok) return;
+      if (!admin.ok)
+        return;
       const auto tier = body_string(req, "tier", "founding_supporter");
       const auto display_name = body_string(req, "display_name");
-      if (!valid_supporter_tier(tier)) return json_error(res, 400, "invalid_tier", "Supporter tier is invalid.");
-      if (display_name.empty()) return json_error(res, 400, "display_name_required", "Display name is required.");
+      if (!valid_supporter_tier(tier))
+        return json_error(res, 400, "invalid_tier", "Supporter tier is invalid.");
+      if (display_name.empty())
+        return json_error(res, 400, "display_name_required", "Display name is required.");
       try
       {
         vix::config::Config cfg{".env"};
@@ -1304,41 +1425,53 @@ namespace cloud::auth::controllers
         const auto now = now_timestamp();
         const auto started = body_int(req, "started_at", now);
         const auto id = make_public_id("supporter", now);
-        db.exec("INSERT INTO founding_supporters (id,user_id,tier,status,display_name,username,project_name,website_url,github_url,public_visible,stronger_visibility,started_at,expires_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", id, body_string(req,"user_id"), tier, "active", display_name, body_string(req,"username"), body_string(req,"project_name"), body_string(req,"website_url"), body_string(req,"github_url"), body_bool(req,"public_visible",true)?1:0, tier=="founding_builder"?1:0, started, body_int(req,"expires_at",0), now, now);
+        db.exec("INSERT INTO founding_supporters (id,user_id,tier,status,display_name,username,project_name,website_url,github_url,public_visible,stronger_visibility,started_at,expires_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", id, body_string(req, "user_id"), tier, "active", display_name, body_string(req, "username"), body_string(req, "project_name"), body_string(req, "website_url"), body_string(req, "github_url"), body_bool(req, "public_visible", true) ? 1 : 0, tier == "founding_builder" ? 1 : 0, started, body_int(req, "expires_at", 0), now, now);
         admin_audit(db, req, admin, "supporter_created", "founding_supporter", id);
         json_ok(res, vix::json::o("id", id));
       }
-      catch (...) { json_error(res, 500, "admin_supporter_create_error", "Could not create supporter."); }
+      catch (...)
+      {
+        json_error(res, 500, "admin_supporter_create_error", "Could not create supporter.");
+      }
     }
 
     void admin_supporter_update(vix::Request &req, vix::Response &res)
     {
       auto admin = require_platform_admin(req, res, true);
-      if (!admin.ok) return;
+      if (!admin.ok)
+        return;
       const auto id = body_string(req, "id");
       const auto tier = body_string(req, "tier", "founding_supporter");
       const auto status = body_string(req, "status", "active");
-      if (id.empty()) return json_error(res, 400, "supporter_required", "Supporter is required.");
-      if (!valid_supporter_tier(tier)) return json_error(res, 400, "invalid_tier", "Supporter tier is invalid.");
-      if (!valid_supporter_status(status)) return json_error(res, 400, "invalid_status", "Supporter status is invalid.");
+      if (id.empty())
+        return json_error(res, 400, "supporter_required", "Supporter is required.");
+      if (!valid_supporter_tier(tier))
+        return json_error(res, 400, "invalid_tier", "Supporter tier is invalid.");
+      if (!valid_supporter_status(status))
+        return json_error(res, 400, "invalid_status", "Supporter status is invalid.");
       try
       {
         vix::config::Config cfg{".env"};
         vix::db::Database db{cfg};
         const auto now = now_timestamp();
-        db.exec("UPDATE founding_supporters SET user_id=?, tier=?, status=?, display_name=?, username=?, project_name=?, website_url=?, github_url=?, public_visible=?, stronger_visibility=?, expires_at=?, updated_at=? WHERE id=?", body_string(req,"user_id"), tier, status, body_string(req,"display_name"), body_string(req,"username"), body_string(req,"project_name"), body_string(req,"website_url"), body_string(req,"github_url"), body_bool(req,"public_visible",true)?1:0, tier=="founding_builder"?1:0, body_int(req,"expires_at",0), now, id);
+        db.exec("UPDATE founding_supporters SET user_id=?, tier=?, status=?, display_name=?, username=?, project_name=?, website_url=?, github_url=?, public_visible=?, stronger_visibility=?, expires_at=?, updated_at=? WHERE id=?", body_string(req, "user_id"), tier, status, body_string(req, "display_name"), body_string(req, "username"), body_string(req, "project_name"), body_string(req, "website_url"), body_string(req, "github_url"), body_bool(req, "public_visible", true) ? 1 : 0, tier == "founding_builder" ? 1 : 0, body_int(req, "expires_at", 0), now, id);
         admin_audit(db, req, admin, "supporter_updated", "founding_supporter", id);
         json_ok(res, vix::json::o("updated", true));
       }
-      catch (...) { json_error(res, 500, "admin_supporter_update_error", "Could not update supporter."); }
+      catch (...)
+      {
+        json_error(res, 500, "admin_supporter_update_error", "Could not update supporter.");
+      }
     }
 
     void admin_supporter_deactivate(vix::Request &req, vix::Response &res)
     {
       auto admin = require_platform_admin(req, res, true);
-      if (!admin.ok) return;
+      if (!admin.ok)
+        return;
       const auto id = body_string(req, "id");
-      if (id.empty()) return json_error(res, 400, "supporter_required", "Supporter is required.");
+      if (id.empty())
+        return json_error(res, 400, "supporter_required", "Supporter is required.");
       try
       {
         vix::config::Config cfg{".env"};
@@ -1348,13 +1481,17 @@ namespace cloud::auth::controllers
         admin_audit(db, req, admin, "supporter_deactivated", "founding_supporter", id);
         json_ok(res, vix::json::o("updated", true));
       }
-      catch (...) { json_error(res, 500, "admin_supporter_deactivate_error", "Could not deactivate supporter."); }
+      catch (...)
+      {
+        json_error(res, 500, "admin_supporter_deactivate_error", "Could not deactivate supporter.");
+      }
     }
 
     void admin_audit_list(vix::Request &req, vix::Response &res)
     {
       auto admin = require_platform_admin(req, res);
-      if (!admin.ok) return;
+      if (!admin.ok)
+        return;
       try
       {
         vix::config::Config cfg{".env"};
@@ -1362,10 +1499,27 @@ namespace cloud::auth::controllers
         ensure_admin_tables(db);
         auto logs = vix::json::Json::array();
         auto rows = db.query("SELECT id,admin_user_id,action,target_type,COALESCE(target_id,''),COALESCE(metadata_json,'{}'),COALESCE(ip_address,''),COALESCE(user_agent,''),created_at FROM admin_audit_logs ORDER BY created_at DESC LIMIT 100");
-        while (rows->next()) { const auto &r=rows->row(); auto item=vix::json::Json::object(); item["id"]=r.getString(0); item["admin_user_id"]=r.getString(1); item["action"]=r.getString(2); item["target_type"]=r.getString(3); item["target_id"]=r.getString(4); item["metadata_json"]=r.getString(5); item["ip_address"]=r.getString(6); item["user_agent"]=r.getString(7); item["created_at"]=r.getInt64(8); logs.push_back(item); }
+        while (rows->next())
+        {
+          const auto &r = rows->row();
+          auto item = vix::json::Json::object();
+          item["id"] = r.getString(0);
+          item["admin_user_id"] = r.getString(1);
+          item["action"] = r.getString(2);
+          item["target_type"] = r.getString(3);
+          item["target_id"] = r.getString(4);
+          item["metadata_json"] = r.getString(5);
+          item["ip_address"] = r.getString(6);
+          item["user_agent"] = r.getString(7);
+          item["created_at"] = r.getInt64(8);
+          logs.push_back(item);
+        }
         json_ok(res, vix::json::o("audit_logs", logs));
       }
-      catch (...) { json_error(res, 500, "admin_audit_error", "Could not load audit logs."); }
+      catch (...)
+      {
+        json_error(res, 500, "admin_audit_error", "Could not load audit logs.");
+      }
     }
 
     void profile_pins_list(vix::Request &req, vix::Response &res)
