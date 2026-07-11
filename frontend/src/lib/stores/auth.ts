@@ -97,6 +97,14 @@ function createAuthStore() {
           error.status === 401 &&
           error.code !== 'network_error'
         ) {
+          if (import.meta.env.DEV) {
+            console.warn('[auth] current session was rejected by /api/auth/me', {
+              code: error.code,
+              message: error.message,
+              status: error.status
+            });
+          }
+
           const next = {
             ...initialState,
             sessionExpired: true,

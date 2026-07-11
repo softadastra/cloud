@@ -147,7 +147,7 @@
 
   $: currentPath = $page.url.pathname;
 
-$: standalonePage =
+  $: standalonePage =
   currentPath === '/' ||
   currentPath === '/login' ||
   currentPath === '/register' ||
@@ -201,7 +201,7 @@ $: standalonePage =
       if (status === 'ok' || status === 'unreachable') {
         verifiedSessionId = sessionId;
       } else if (status === 'invalid' && !standalonePage) {
-        void goto('/login');
+        void goto(loginHrefForCurrentPage());
       }
     });
   }
@@ -220,6 +220,16 @@ $: standalonePage =
     initializedSessionId = '';
     verifiedSessionId = '';
     notifications.clear();
+  }
+
+  function loginHrefForCurrentPage() {
+    const currentHref = `${$page.url.pathname}${$page.url.search}`;
+
+    if (!currentHref || currentHref === '/login') {
+      return '/login';
+    }
+
+    return `/login?redirect=${encodeURIComponent(currentHref)}`;
   }
 
   function clampSidebarWidth(value: number) {
@@ -281,6 +291,23 @@ $: standalonePage =
     params.set("workspace_id", workspaceId);
 
     return path + "?" + params.toString();
+  }
+
+  async function selectWorkspace(workspaceId: string) {
+    workspaceContext.setSelectedWorkspace(workspaceId);
+
+    if (!workspaceId || !workspaceScopedRoutes.has(currentPath)) {
+      return;
+    }
+
+    const params = new URLSearchParams($page.url.search);
+    params.set("workspace_id", workspaceId);
+
+    const nextHref = `${currentPath}?${params.toString()}`;
+
+    if (nextHref !== `${$page.url.pathname}${$page.url.search}`) {
+      await goto(nextHref, { keepFocus: true, noScroll: true });
+    }
   }
 
   function isActive(href: string) {
@@ -701,9 +728,7 @@ $: standalonePage =
             aria-label="Current workspace"
             value={$workspaceContext.selectedWorkspace?.id ?? ''}
             onchange={(event) =>
-              workspaceContext.setSelectedWorkspace(
-                event.currentTarget.value
-              )}
+              void selectWorkspace(event.currentTarget.value)}
           >
             {#each $workspaceContext.workspaces as workspace (workspace.id)}
               <option value={workspace.id}>
