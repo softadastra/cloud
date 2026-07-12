@@ -1,6 +1,6 @@
 <script lang="ts">
+  import { usePageRefresh } from '$lib/stores/pageRefresh';
   import { goto } from '$app/navigation';
-  import { onMount } from 'svelte';
   import {
     archivePackage,
     changePackageVisibility,
@@ -404,7 +404,7 @@
     }
   }
 
-  onMount(load);
+  usePageRefresh(load);
 </script>
 
 <svelte:head>

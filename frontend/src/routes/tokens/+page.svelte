@@ -1,6 +1,7 @@
 <script lang="ts">
+  import { usePageRefresh } from '$lib/stores/pageRefresh';
   import { goto } from '$app/navigation';
-  import { onMount, tick } from 'svelte';
+  import { tick } from 'svelte';
   import {
     createToken,
     defaultCliScopes,
@@ -360,7 +361,7 @@
     void submitToken();
   }
 
-  onMount(load);
+  usePageRefresh(load);
 </script>
 
 <svelte:head>

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { usePageRefresh } from '$lib/stores/pageRefresh';
   import InlineError from '$lib/components/InlineError.svelte';
   import AdminShell from '$lib/components/admin/AdminShell.svelte';
   import SupporterBadge from '$lib/components/SupporterBadge.svelte';
@@ -86,7 +86,7 @@
       .replace(/\b\w/g, (letter) => letter.toUpperCase());
   }
 
-  onMount(load);
+  usePageRefresh(load);
 </script>
 
 <svelte:head>

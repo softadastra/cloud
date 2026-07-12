@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { usePageRefresh } from '$lib/stores/pageRefresh';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { listMembers } from '$lib/api/members';
@@ -484,9 +485,9 @@
     }
   }
 
-  onMount(() => {
-    void load();
+  usePageRefresh(load);
 
+  onMount(() => {
     return () => {
       if (copyResetTimer) {
         clearTimeout(copyResetTimer);

@@ -1,6 +1,7 @@
 <script lang="ts">
+  import { usePageRefresh } from '$lib/stores/pageRefresh';
   import { goto } from '$app/navigation';
-  import { onMount, tick } from 'svelte';
+  import { tick } from 'svelte';
   import { get } from 'svelte/store';
   import {
     listMembers,
@@ -661,7 +662,7 @@
     }
   }
 
-  onMount(load);
+  usePageRefresh(load);
 </script>
 
 <svelte:head>

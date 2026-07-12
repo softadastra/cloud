@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { usePageRefresh } from '$lib/stores/pageRefresh';
   import {
     closeFeedback,
     createFeedback,
@@ -348,9 +348,7 @@
     }
   }
 
-  onMount(() => {
-    void load();
-  });
+  usePageRefresh(load);
 </script>
 
 <svelte:head>

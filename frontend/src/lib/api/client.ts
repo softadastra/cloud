@@ -5,6 +5,7 @@ export type ApiClientOptions = {
   baseUrl?: string;
   sessionId?: string | null;
   authHeader?: 'authorization' | 'x-session-id' | 'both';
+  credentials?: RequestCredentials;
 };
 
 const DEFAULT_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV && browser ? `${window.location.protocol}//${window.location.hostname}:8080` : '');
@@ -24,11 +25,13 @@ export class ApiClient {
   private readonly baseUrl: string;
   private sessionId: string | null;
   private readonly authHeader: 'authorization' | 'x-session-id' | 'both';
+  private readonly credentials: RequestCredentials;
 
   constructor(options: ApiClientOptions = {}) {
     this.baseUrl = options.baseUrl ?? DEFAULT_BASE_URL;
     this.sessionId = options.sessionId ?? null;
     this.authHeader = options.authHeader ?? 'authorization';
+    this.credentials = options.credentials ?? 'include';
   }
 
   setSession(sessionId: string | null) {
@@ -79,6 +82,7 @@ export class ApiClient {
       fetch(`${this.baseUrl}${path}`, {
         method: 'POST',
         headers,
+        credentials: this.credentials,
         body
       });
 
@@ -87,7 +91,6 @@ export class ApiClient {
     try {
       response = await request();
     } catch {
-      this.sessionId = null;
       this.restoreSessionFromStorage();
       const retryHeaders = this.authHeaders({ Accept: 'application/json' });
 
@@ -99,6 +102,7 @@ export class ApiClient {
         response = await fetch(`${this.baseUrl}${path}`, {
           method: 'POST',
           headers: retryHeaders,
+          credentials: this.credentials,
           body
         });
       } catch {
@@ -135,7 +139,8 @@ export class ApiClient {
 
     const init: RequestInit = {
       method,
-      headers
+      headers,
+      credentials: this.credentials
     };
 
     if (body !== undefined) {

@@ -1,6 +1,6 @@
 <script lang="ts">
+  import { usePageRefresh } from '$lib/stores/pageRefresh';
   import { goto } from '$app/navigation';
-  import { onMount } from 'svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
   import InlineError from '$lib/components/InlineError.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
@@ -74,7 +74,7 @@
     });
   }
 
-  onMount(load);
+  usePageRefresh(load);
 </script>
 
 <svelte:head><title>Notifications | Softadastra Cloud</title></svelte:head>

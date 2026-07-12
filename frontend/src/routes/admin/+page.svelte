@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { usePageRefresh } from '$lib/stores/pageRefresh';
   import InlineError from '$lib/components/InlineError.svelte';
   import AdminShell from '$lib/components/admin/AdminShell.svelte';
   import { getAdminModules, getAdminOverview } from '$lib/api/admin';
@@ -136,7 +136,7 @@
     }
   }
 
-  onMount(load);
+  usePageRefresh(load);
 </script>
 
 <svelte:head>

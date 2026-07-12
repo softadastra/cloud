@@ -1,6 +1,6 @@
 <script lang="ts">
+  import { usePageRefresh } from '$lib/stores/pageRefresh';
   import { goto } from '$app/navigation';
-  import { onMount } from 'svelte';
   import { createWorkspace, listWorkspaces } from '$lib/api/workspaces';
   import { listProjects } from '$lib/api/projects';
   import {
@@ -417,7 +417,7 @@
     }
   }
 
-  onMount(load);
+  usePageRefresh(load);
 </script>
 
 <svelte:head>

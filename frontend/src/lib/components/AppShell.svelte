@@ -9,6 +9,7 @@
   import { auth } from '$lib/stores/auth';
   import { notifications } from '$lib/stores/notifications';
   import { workspaceContext } from '$lib/stores/workspace';
+  import { requestPageRefresh } from '$lib/stores/pageRefresh';
 
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? (browser ? `${window.location.protocol}//${window.location.hostname}:8080` : '');
 
@@ -186,6 +187,9 @@
       : '';
 
   $: unread = $notifications.unreadCount;
+  $: topbarTitle = currentNavigationLabel();
+
+  $: topbarContext = $workspaceContext.selectedWorkspace?.name ?? "";
 
   $: if (
     $auth.session?.id &&
@@ -220,6 +224,18 @@
     initializedSessionId = '';
     verifiedSessionId = '';
     notifications.clear();
+  }
+
+  function currentNavigationLabel() {
+    for (const group of navigationGroups) {
+      for (const item of group.items) {
+        if (isActive(item.href)) {
+          return item.label;
+        }
+      }
+    }
+
+    return 'Softadastra Cloud';
   }
 
   function loginHrefForCurrentPage() {
@@ -473,6 +489,17 @@
     if (sidebarOpen) {
       closeMobileSidebar();
     }
+  }
+
+  async function refreshPageData() {
+    accountMenuOpen = false;
+
+    if ($auth.session?.id) {
+      await auth.refreshCurrentUser();
+      void notifications.loadNotifications();
+    }
+
+    requestPageRefresh('manual');
   }
 
   function logout() {
@@ -935,6 +962,31 @@
   class:authenticated={$auth.session}
   class="app-main"
 >
+  {#if $auth.session}
+    <header class="app-topbar" aria-label="Primary page header">
+      <div class="app-topbar__title">
+        <p>Softadastra Cloud</p>
+        <h1>{topbarTitle}</h1>
+      </div>
+
+      {#if topbarContext}
+        <p class="app-topbar__context">{topbarContext}</p>
+      {/if}
+
+      <button
+        class="icon-button app-topbar__refresh"
+        type="button"
+        aria-label="Refresh page data"
+        title="Refresh page data"
+        onclick={refreshPageData}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M21 12a9 9 0 0 1-15.5 6.2L3 15.7M3 21v-5.3h5.3M3 12A9 9 0 0 1 18.5 5.8L21 8.3M21 3v5.3h-5.3"></path>
+        </svg>
+      </button>
+    </header>
+  {/if}
+
   <div
     class:app-main__inner={true}
   >
@@ -968,6 +1020,7 @@
       --sidebar-current-width,
       var(--sidebar-w)
     );
+    padding-top: 0;
     transition:
       margin-left var(--speed) var(--ease),
       padding-left var(--speed) var(--ease);
@@ -988,7 +1041,61 @@
     padding-left: 72px;
   }
 
-  /* Header */
+  .app-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    display: flex;
+    min-height: 64px;
+    align-items: center;
+    gap: 16px;
+    margin: 0 -34px 30px;
+    padding: 10px 34px;
+    border-bottom: 1px solid var(--line-soft);
+    background: color-mix(in srgb, var(--bg) 92%, transparent);
+    backdrop-filter: blur(14px);
+  }
+
+  .app-topbar__title {
+    min-width: 0;
+    margin-right: auto;
+  }
+
+  .app-topbar__title p {
+    margin: 0 0 2px;
+    color: var(--text-faint);
+    font-size: 11px;
+    font-weight: 650;
+    text-transform: uppercase;
+  }
+
+  .app-topbar__title h1 {
+    overflow: hidden;
+    margin: 0;
+    color: var(--text);
+    font-size: 18px;
+    font-weight: 750;
+    line-height: 1.15;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .app-topbar__context {
+    overflow: hidden;
+    max-width: 34ch;
+    margin: 0;
+    color: var(--text-soft);
+    font-size: 13px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .app-topbar__refresh {
+    flex: 0 0 auto;
+  }
+
+  
 
   .sidebar-header {
     min-height: 62px;
@@ -1471,7 +1578,25 @@
     .sidebar-collapsed
       .app-main.authenticated {
       margin-left: 0;
-      padding: 20px 14px 48px;
+      padding: 0 14px 48px;
+    }
+
+    .app-topbar {
+      min-height: 58px;
+      margin: 0 -14px 20px;
+      padding: 8px 14px;
+    }
+
+    .app-topbar__title p {
+      display: none;
+    }
+
+    .app-topbar__title h1 {
+      font-size: 16px;
+    }
+
+    .app-topbar__context {
+      display: none;
     }
 
     .sidebar-header {
