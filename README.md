@@ -263,6 +263,7 @@ This project does not generate `public/` or `views/`, and `AppBootstrap` does no
 - Keep reusable helpers under `support/`.
 - Put business logic under `application/` and `domain/` as the app grows.
 - Put database, files, and external services under `infrastructure/`.
+
 ## Founding Supporters
 
 Softadastra Cloud is in active development as a C++ cloud workspace for Vix projects, private packages, lockfiles, build reports, permissions, notifications and team activity. The Founding Supporters program is an early way to support that work before the full paid platform is ready.
