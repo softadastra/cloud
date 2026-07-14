@@ -11,6 +11,8 @@
   import type { PublicPackageActivityEvent, PublicPackageDetail } from '$lib/api/types';
 
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? (browser ? window.location.protocol + '//' + window.location.hostname + ':8080' : '');
+  const SITE_URL = import.meta.env.VITE_PUBLIC_SITE_URL ?? 'https://business.softadastra.com';
+  const OG_IMAGE_URL = SITE_URL + '/og-logo.png';
 
   let packageDetail: PublicPackageDetail | null = null;
   let loading = true;
@@ -26,6 +28,15 @@
     ? (owner.avatar_url.startsWith('http') ? owner.avatar_url : API_BASE_URL + owner.avatar_url)
     : '';
   $: ownerInitial = (owner?.display_name || owner?.username || 'S').slice(0, 1).toUpperCase();
+  $: packageDescription =
+    packageDetail?.description ||
+    'Public Vix package on Softadastra Cloud.';
+  $: packageUrl =
+    SITE_URL +
+    '/p/' +
+    encodeURIComponent(namespace) +
+    '/' +
+    encodeURIComponent(name);
 
   function formatDate(value: number) {
     if (!value) return '';
@@ -89,7 +100,18 @@
 
 <svelte:head>
   <title>{fullName} | Softadastra Cloud</title>
-  <meta name="description" content={packageDetail?.description || 'Public Vix package on Softadastra Cloud.'} />
+  <meta name="description" content={packageDescription} />
+  <link rel="canonical" href={packageUrl} />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content={fullName + ' | Softadastra Cloud'} />
+  <meta property="og:description" content={packageDescription} />
+  <meta property="og:url" content={packageUrl} />
+  <meta property="og:image" content={OG_IMAGE_URL} />
+
+  <meta name="twitter:title" content={fullName + ' | Softadastra Cloud'} />
+  <meta name="twitter:description" content={packageDescription} />
+  <meta name="twitter:image" content={OG_IMAGE_URL} />
 </svelte:head>
 
 <main class="package-page">

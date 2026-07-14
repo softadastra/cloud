@@ -1,32 +1,28 @@
 <script lang="ts">
-  import { goto } from '$app/navigation';
   import { browser } from '$app/environment';
+  import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { onMount } from 'svelte';
+
   import AccessScopeBadge from '$lib/components/AccessScopeBadge.svelte';
   import RoleBadge from '$lib/components/RoleBadge.svelte';
   import WorkspaceAvatar from '$lib/components/WorkspaceAvatar.svelte';
+
   import { auth } from '$lib/stores/auth';
   import { notifications } from '$lib/stores/notifications';
-  import { workspaceContext } from '$lib/stores/workspace';
   import { requestPageRefresh } from '$lib/stores/pageRefresh';
+  import { workspaceContext } from '$lib/stores/workspace';
 
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? (browser ? `${window.location.protocol}//${window.location.hostname}:8080` : '');
-
-  const SIDEBAR_MIN_WIDTH = 232;
-  const SIDEBAR_MAX_WIDTH = 360;
-  const SIDEBAR_DEFAULT_WIDTH = 264;
-
-  const SIDEBAR_WIDTH_KEY =
-    'softadastra-cloud:sidebar-width';
+  const API_BASE_URL =
+    import.meta.env.VITE_API_BASE_URL ??
+    (
+      browser
+        ? `${window.location.protocol}//${window.location.hostname}:8080`
+        : ''
+    );
 
   const SIDEBAR_COLLAPSED_KEY =
     'softadastra-cloud:sidebar-collapsed';
-
-  const SIDEBAR_GROUPS_KEY =
-    'softadastra-cloud:sidebar-groups';
-
-  $: visibleNavigationGroups = navigationGroups.filter((group) => group.key !== 'admin' || Boolean($auth.user?.platform_admin));
 
   const navigationGroups = [
     {
@@ -38,12 +34,6 @@
           label: 'Dashboard',
           icon:
             'M4 4h6v7H4V4Zm10 0h6v4h-6V4Zm0 8h6v8h-6v-8ZM4 15h6v5H4v-5Z'
-        },
-        {
-          href: '/workspaces',
-          label: 'Workspaces',
-          icon:
-            'M4 20V7l8-4 8 4v13M8 20v-4h8v4M8 9h1M11.5 9h1M15 9h1M8 12h1M11.5 12h1M15 12h1'
         },
         {
           href: '/projects',
@@ -70,12 +60,6 @@
             'm12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Zm0 9 8-4.5M12 12 4 7.5M12 12v9'
         },
         {
-          href: '/package-versions',
-          label: 'Versions',
-          icon:
-            'M20 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h7M16 3h5v5M10 14 21 3'
-        },
-        {
           href: '/lockfiles',
           label: 'Lockfiles',
           icon:
@@ -95,9 +79,27 @@
         },
         {
           href: '/tokens',
-          label: 'Tokens',
+          label: 'CLI tokens',
           icon:
             'M15 7a5 5 0 1 1-1.46 3.54L21 18v3h-3v-2h-3v-3h-2.17'
+        }
+      ]
+    },
+    {
+      key: 'activity',
+      label: 'Activity',
+      items: [
+        {
+          href: '/notifications',
+          label: 'Notifications',
+          icon:
+            'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4'
+        },
+        {
+          href: '/feedback',
+          label: 'Feedback',
+          icon:
+            'M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8ZM8 9h8M8 13h5'
         }
       ]
     },
@@ -112,20 +114,36 @@
             'M12 3 20 7v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7l8-4Zm0 6v5M12 17h.01'
         }
       ]
-    },
-    {
-      key: 'support',
-      label: 'Support',
-      items: [
-        {
-          href: '/feedback',
-          label: 'Feedback',
-          icon:
-            'M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8ZM8 9h8M8 13h5'
-        }
-      ]
     }
   ] as const;
+
+  const supplementalPageLabels = [
+    {
+      path: '/workspaces',
+      label: 'Workspaces'
+    },
+    {
+      path: '/package-versions',
+      label: 'Package versions'
+    },
+    {
+      path: '/account',
+      label: 'Account'
+    }
+  ] as const;
+
+  const workspaceScopedRoutes =
+    new Set([
+      '/dashboard',
+      '/workspaces',
+      '/projects',
+      '/members',
+      '/packages',
+      '/package-versions',
+      '/lockfiles',
+      '/build-reports',
+      '/tokens'
+    ]);
 
   let initializedSessionId = '';
   let verifiedSessionId = '';
@@ -133,30 +151,33 @@
 
   let sidebarOpen = false;
   let sidebarCollapsed = false;
-  let sidebarWidth = SIDEBAR_DEFAULT_WIDTH;
-  let resizingSidebar = false;
 
+  let workspaceMenuOpen = false;
   let accountMenuOpen = false;
 
-  let expandedGroups: Record<string, boolean> = {
-    workspace: true,
-    registry: true,
-    operations: true,
-    support: true,
-    admin: false
-  };
+  let lastPath = '';
 
-  $: currentPath = $page.url.pathname;
+  $: currentPath =
+    $page.url.pathname;
 
   $: standalonePage =
-  currentPath === '/' ||
-  currentPath === '/login' ||
-  currentPath === '/register' ||
-  currentPath === '/support' ||
-  currentPath === '/supporters' ||
-  currentPath === '/404' ||
-  currentPath.startsWith('/u/') ||
-  currentPath.startsWith('/p/');
+    currentPath === '/' ||
+    currentPath === '/login' ||
+    currentPath === '/register' ||
+    currentPath === '/support' ||
+    currentPath === '/supporters' ||
+    currentPath === '/404' ||
+    currentPath.startsWith('/u/') ||
+    currentPath.startsWith('/p/');
+
+  $: visibleNavigationGroups =
+    navigationGroups.filter(
+      (group) =>
+        group.key !== 'admin' ||
+        Boolean(
+          $auth.user?.platform_admin
+        )
+    );
 
   $: accountName =
     $auth.user?.display_name ||
@@ -164,8 +185,7 @@
     'Account';
 
   $: accountEmail =
-    $auth.user?.email ||
-    '';
+    $auth.user?.email || '';
 
   $: initial = (
     accountName ||
@@ -175,63 +195,152 @@
     .slice(0, 1)
     .toUpperCase();
 
-  $: accountAvatarUrl = $auth.user?.avatar_url
-    ? $auth.user.avatar_url.startsWith('http')
-      ? $auth.user.avatar_url
-      : `${API_BASE_URL}${$auth.user.avatar_url}`
-    : '';
+  $: accountAvatarUrl =
+    $auth.user?.avatar_url
+      ? $auth.user.avatar_url.startsWith(
+          'http'
+        )
+        ? $auth.user.avatar_url
+        : `${API_BASE_URL}${$auth.user.avatar_url}`
+      : '';
 
   $: publicProfileHref =
-    $auth.user?.public_profile_enabled && $auth.user?.username
+    $auth.user?.public_profile_enabled &&
+    $auth.user?.username
       ? `/u/${$auth.user.username}`
       : '';
 
-  $: unread = $notifications.unreadCount;
-  $: topbarTitle = currentNavigationLabel();
+  $: selectedWorkspace =
+    $workspaceContext.selectedWorkspace ??
+    null;
 
-  $: topbarContext = $workspaceContext.selectedWorkspace?.name ?? "";
+  $: workspaces =
+    $workspaceContext.workspaces;
+
+  $: unread =
+    $notifications.unreadCount;
+
+  $: mobilePageTitle =
+    currentNavigationLabel();
+
+  $: menuOpen =
+    workspaceMenuOpen ||
+    accountMenuOpen;
+
+  $: if (
+    currentPath !== lastPath
+  ) {
+    lastPath = currentPath;
+
+    sidebarOpen = false;
+    workspaceMenuOpen = false;
+    accountMenuOpen = false;
+  }
 
   $: if (
     $auth.session?.id &&
-    verifiedSessionId !== $auth.session.id &&
+    verifiedSessionId !==
+      $auth.session.id &&
     !verifyingSession
   ) {
     verifyingSession = true;
-    const sessionId = $auth.session.id;
 
-    auth.refreshCurrentUser().then((status) => {
-      verifyingSession = false;
+    const sessionId =
+      $auth.session.id;
 
-      if (status === 'ok' || status === 'unreachable') {
-        verifiedSessionId = sessionId;
-      } else if (status === 'invalid' && !standalonePage) {
-        void goto(loginHrefForCurrentPage());
-      }
-    });
+    auth
+      .refreshCurrentUser()
+      .then((status) => {
+        verifyingSession = false;
+
+        if (
+          status === 'ok' ||
+          status === 'unreachable'
+        ) {
+          verifiedSessionId =
+            sessionId;
+        } else if (
+          status === 'invalid' &&
+          !standalonePage
+        ) {
+          void goto(
+            loginHrefForCurrentPage()
+          );
+        }
+      });
   }
 
   $: if (
     $auth.session?.id &&
-    initializedSessionId !== $auth.session.id
+    initializedSessionId !==
+      $auth.session.id
   ) {
-    initializedSessionId = $auth.session.id;
+    initializedSessionId =
+      $auth.session.id;
 
-    notifications.loadNotifications();
-    notifications.connectRealtime($auth.session.id);
+    void notifications.loadNotifications();
+
+    notifications.connectRealtime(
+      $auth.session.id
+    );
   }
 
-  $: if (!$auth.session && initializedSessionId) {
+  $: if (
+    !$auth.session &&
+    initializedSessionId
+  ) {
     initializedSessionId = '';
     verifiedSessionId = '';
+
     notifications.clear();
   }
 
+  function routePath(
+    href: string
+  ) {
+    return href.split('?', 1)[0];
+  }
+
+  function isActive(
+    href: string
+  ) {
+    const path =
+      routePath(href);
+
+    return (
+      currentPath === path ||
+      currentPath.startsWith(
+        `${path}/`
+      )
+    );
+  }
+
   function currentNavigationLabel() {
-    for (const group of navigationGroups) {
-      for (const item of group.items) {
+    for (
+      const group of
+      navigationGroups
+    ) {
+      for (
+        const item of
+        group.items
+      ) {
         if (isActive(item.href)) {
           return item.label;
         }
+      }
+    }
+
+    for (
+      const item of
+      supplementalPageLabels
+    ) {
+      if (
+        currentPath === item.path ||
+        currentPath.startsWith(
+          `${item.path}/`
+        )
+      ) {
+        return item.label;
       }
     }
 
@@ -239,264 +348,158 @@
   }
 
   function loginHrefForCurrentPage() {
-    const currentHref = `${$page.url.pathname}${$page.url.search}`;
+    const currentHref =
+      `${$page.url.pathname}` +
+      `${$page.url.search}`;
 
-    if (!currentHref || currentHref === '/login') {
+    if (
+      !currentHref ||
+      currentHref === '/login'
+    ) {
       return '/login';
     }
 
-    return `/login?redirect=${encodeURIComponent(currentHref)}`;
-  }
-
-  function clampSidebarWidth(value: number) {
-    return Math.min(
-      SIDEBAR_MAX_WIDTH,
-      Math.max(SIDEBAR_MIN_WIDTH, value)
+    return (
+      '/login?redirect=' +
+      encodeURIComponent(
+        currentHref
+      )
     );
   }
 
-  function saveSidebarWidth() {
-    localStorage.setItem(
-      SIDEBAR_WIDTH_KEY,
-      String(sidebarWidth)
+  function navigationHref(
+    href: string
+  ) {
+    const workspaceId =
+      selectedWorkspace?.id ?? '';
+
+    const path =
+      routePath(href);
+
+    if (
+      !workspaceId ||
+      !workspaceScopedRoutes.has(path)
+    ) {
+      return href;
+    }
+
+    const queryStart =
+      href.indexOf('?');
+
+    const params =
+      new URLSearchParams(
+        queryStart === -1
+          ? ''
+          : href.slice(
+              queryStart + 1
+            )
+      );
+
+    params.set(
+      'workspace_id',
+      workspaceId
+    );
+
+    return (
+      `${path}?` +
+      params.toString()
     );
   }
 
-  function saveSidebarCollapsed() {
+  async function selectWorkspace(
+    workspaceId: string
+  ) {
+    workspaceMenuOpen = false;
+
+    workspaceContext
+      .setSelectedWorkspace(
+        workspaceId
+      );
+
+    if (
+      !workspaceId ||
+      !workspaceScopedRoutes.has(
+        currentPath
+      )
+    ) {
+      return;
+    }
+
+    const params =
+      new URLSearchParams(
+        $page.url.search
+      );
+
+    params.set(
+      'workspace_id',
+      workspaceId
+    );
+
+    const nextHref =
+      `${currentPath}?` +
+      params.toString();
+
+    const currentHref =
+      `${$page.url.pathname}` +
+      `${$page.url.search}`;
+
+    if (
+      nextHref !== currentHref
+    ) {
+      await goto(
+        nextHref,
+        {
+          keepFocus: true,
+          noScroll: true
+        }
+      );
+    }
+  }
+
+  function closeMenus() {
+    workspaceMenuOpen = false;
+    accountMenuOpen = false;
+  }
+
+  function closeMobileSidebar() {
+    sidebarOpen = false;
+    closeMenus();
+  }
+
+  function toggleWorkspaceMenu() {
+    workspaceMenuOpen =
+      !workspaceMenuOpen;
+
+    accountMenuOpen = false;
+  }
+
+  function toggleAccountMenu() {
+    accountMenuOpen =
+      !accountMenuOpen;
+
+    workspaceMenuOpen = false;
+  }
+
+  function toggleDesktopSidebar() {
+    sidebarCollapsed =
+      !sidebarCollapsed;
+
+    closeMenus();
+
     localStorage.setItem(
       SIDEBAR_COLLAPSED_KEY,
       String(sidebarCollapsed)
     );
   }
 
-  function saveExpandedGroups() {
-    localStorage.setItem(
-      SIDEBAR_GROUPS_KEY,
-      JSON.stringify(expandedGroups)
-    );
-  }
-
-  const workspaceScopedRoutes = new Set([
-    "/dashboard",
-    "/workspaces",
-    "/projects",
-    "/members",
-    "/packages",
-    "/package-versions",
-    "/lockfiles",
-    "/build-reports",
-    "/tokens"
-  ]);
-
-  function routePath(href: string) {
-    return href.split("?", 1)[0];
-  }
-
-  function navigationHref(href: string) {
-    const workspaceId = $workspaceContext.selectedWorkspace?.id ?? "";
-    const path = routePath(href);
-
-    if (!workspaceId || !workspaceScopedRoutes.has(path)) {
-      return href;
-    }
-
-    const queryStart = href.indexOf("?");
-    const params = new URLSearchParams(
-      queryStart === -1 ? "" : href.slice(queryStart + 1)
-    );
-    params.set("workspace_id", workspaceId);
-
-    return path + "?" + params.toString();
-  }
-
-  async function selectWorkspace(workspaceId: string) {
-    workspaceContext.setSelectedWorkspace(workspaceId);
-
-    if (!workspaceId || !workspaceScopedRoutes.has(currentPath)) {
-      return;
-    }
-
-    const params = new URLSearchParams($page.url.search);
-    params.set("workspace_id", workspaceId);
-
-    const nextHref = `${currentPath}?${params.toString()}`;
-
-    if (nextHref !== `${$page.url.pathname}${$page.url.search}`) {
-      await goto(nextHref, { keepFocus: true, noScroll: true });
-    }
-  }
-
-  function isActive(href: string) {
-    const path = routePath(href);
-
-    return (
-      currentPath === path ||
-      currentPath.startsWith(path + "/")
-    );
-  }
-
-  function groupContainsActiveRoute(
-    group: (typeof navigationGroups)[number]
-  ) {
-    return group.items.some((item) =>
-      isActive(item.href)
-    );
-  }
-
-  function toggleNavigationGroup(key: string) {
-    expandedGroups = {
-      ...expandedGroups,
-      [key]: !expandedGroups[key]
-    };
-
-    saveExpandedGroups();
-  }
-
-  function closeMobileSidebar() {
-    sidebarOpen = false;
-    accountMenuOpen = false;
-  }
-
-  function openMobileSidebar() {
-    sidebarOpen = true;
-  }
-
-  function toggleDesktopSidebar() {
-    sidebarCollapsed = !sidebarCollapsed;
-    accountMenuOpen = false;
-
-    saveSidebarCollapsed();
-
-    if (sidebarCollapsed) {
-      stopSidebarResize();
-    }
-  }
-
-  function openDesktopSidebar() {
-    sidebarCollapsed = false;
-    saveSidebarCollapsed();
-  }
-
-  function toggleAccountMenu() {
-    accountMenuOpen = !accountMenuOpen;
-  }
-
-  function startSidebarResize(event: PointerEvent) {
-    if (
-      event.button !== 0 ||
-      sidebarCollapsed ||
-      window.innerWidth <= 880
-    ) {
-      return;
-    }
-
-    event.preventDefault();
-
-    resizingSidebar = true;
-
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-  }
-
-  function resizeSidebar(event: PointerEvent) {
-    if (!resizingSidebar) {
-      return;
-    }
-
-    sidebarWidth = clampSidebarWidth(
-      event.clientX
-    );
-  }
-
-  function stopSidebarResize() {
-    if (!resizingSidebar) {
-      return;
-    }
-
-    resizingSidebar = false;
-
-    document.body.style.cursor = '';
-    document.body.style.userSelect = '';
-
-    saveSidebarWidth();
-  }
-
-  function resetSidebarWidth() {
-    sidebarWidth = SIDEBAR_DEFAULT_WIDTH;
-    saveSidebarWidth();
-  }
-
-  function handleResizerKeydown(
-    event: KeyboardEvent
-  ) {
-    const step = event.shiftKey ? 32 : 12;
-
-    if (event.key === 'ArrowLeft') {
-      event.preventDefault();
-
-      sidebarWidth = clampSidebarWidth(
-        sidebarWidth - step
-      );
-
-      saveSidebarWidth();
-      return;
-    }
-
-    if (event.key === 'ArrowRight') {
-      event.preventDefault();
-
-      sidebarWidth = clampSidebarWidth(
-        sidebarWidth + step
-      );
-
-      saveSidebarWidth();
-      return;
-    }
-
-    if (event.key === 'Home') {
-      event.preventDefault();
-
-      sidebarWidth = SIDEBAR_MIN_WIDTH;
-      saveSidebarWidth();
-      return;
-    }
-
-    if (event.key === 'End') {
-      event.preventDefault();
-
-      sidebarWidth = SIDEBAR_MAX_WIDTH;
-      saveSidebarWidth();
-    }
-  }
-
-  function handleWindowKeydown(
-    event: KeyboardEvent
-  ) {
-    if (event.key !== 'Escape') {
-      return;
-    }
-
-    if (accountMenuOpen) {
-      accountMenuOpen = false;
-      return;
-    }
-
-    if (resizingSidebar) {
-      stopSidebarResize();
-      return;
-    }
-
-    if (sidebarOpen) {
-      closeMobileSidebar();
-    }
-  }
-
   async function refreshPageData() {
-    accountMenuOpen = false;
+    closeMenus();
 
     if ($auth.session?.id) {
       await auth.refreshCurrentUser();
-      void notifications.loadNotifications();
+
+      void notifications
+        .loadNotifications();
     }
 
     requestPageRefresh('manual');
@@ -507,193 +510,97 @@
     workspaceContext.clear();
     notifications.clear();
 
-    window.location.href = '/login';
+    window.location.href =
+      '/login';
   }
 
-  async function openAccount() {
-    accountMenuOpen = false;
-    closeMobileSidebar();
+  function handleWindowKeydown(
+    event: KeyboardEvent
+  ) {
+    if (event.key !== 'Escape') {
+      return;
+    }
 
-    await goto('/account');
+    if (menuOpen) {
+      closeMenus();
+      return;
+    }
+
+    if (sidebarOpen) {
+      closeMobileSidebar();
+    }
   }
 
   onMount(() => {
-    const storedWidth = Number(
-      localStorage.getItem(SIDEBAR_WIDTH_KEY)
-    );
-
-    if (Number.isFinite(storedWidth)) {
-      sidebarWidth = clampSidebarWidth(
-        storedWidth
-      );
-    }
-
     sidebarCollapsed =
       localStorage.getItem(
         SIDEBAR_COLLAPSED_KEY
       ) === 'true';
-
-    const storedGroups = localStorage.getItem(
-      SIDEBAR_GROUPS_KEY
-    );
-
-    if (storedGroups) {
-      try {
-        expandedGroups = {
-          ...expandedGroups,
-          ...JSON.parse(storedGroups)
-        };
-      } catch {
-        localStorage.removeItem(
-          SIDEBAR_GROUPS_KEY
-        );
-      }
-    }
-
-    for (const group of visibleNavigationGroups) {
-      if (groupContainsActiveRoute(group)) {
-        expandedGroups = {
-          ...expandedGroups,
-          [group.key]: true
-        };
-      }
-    }
-
-    return () => {
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
   });
 </script>
 
 <svelte:window
   onkeydown={handleWindowKeydown}
-  onpointermove={resizeSidebar}
-  onpointerup={stopSidebarResize}
 />
 
 {#if standalonePage}
   <slot />
 {:else}
-<div
-  class="app-shell"
-  class:sidebar-collapsed={sidebarCollapsed}
-  class:sidebar-resizing={resizingSidebar}
-  style={`--sidebar-current-width: ${sidebarWidth}px;`}
->
- {#if $auth.session}
-    <header class="mobile-header">
-      <button
-        class="icon-button"
-        type="button"
-        aria-label="Open navigation"
-        aria-expanded={sidebarOpen}
-        aria-controls="app-sidebar"
-        onclick={openMobileSidebar}
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M4 7h16M4 12h16M4 17h16"></path>
-        </svg>
-      </button>
-
-      <a
-        class="mobile-brand"
-        href="/dashboard"
-      >
-        <img
-          src="/brand/softadastra-cloud.svg"
-          alt=""
-          aria-hidden="true"
-        />
-
-        <span>Softadastra Cloud</span>
-      </a>
-
-      <a
-        class="icon-button"
-        href="/notifications"
-        aria-label="Notifications"
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path
-            d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"
-          ></path>
-        </svg>
-
-        {#if unread > 0}
-          <span class="icon-button__count">
-            {unread > 99 ? '99+' : unread}
-          </span>
-        {/if}
-      </a>
-    </header>
-
-    <button
-      class:visible={sidebarOpen}
-      class="sidebar-backdrop"
-      type="button"
-      tabindex="-1"
-      aria-label="Close navigation"
-      onclick={closeMobileSidebar}
-    ></button>
-
-    {#if sidebarCollapsed}
-      <button
-        class="sidebar-reopen"
-        type="button"
-        aria-label="Open sidebar"
-        title="Open sidebar"
-        aria-controls="app-sidebar"
-        onclick={openDesktopSidebar}
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <rect
-            x="3"
-            y="4"
-            width="18"
-            height="16"
-            rx="2"
-          ></rect>
-
-          <path d="M9 4v16"></path>
-          <path d="m13 9 3 3-3 3"></path>
-        </svg>
-      </button>
-    {/if}
-
-    <aside
-      id="app-sidebar"
-      class:open={sidebarOpen}
-      class="app-sidebar"
-    >
-      <header class="sidebar-header">
-        <a
-          class="sidebar-brand"
-          href="/dashboard"
-          aria-label="Softadastra Cloud dashboard"
-          onclick={closeMobileSidebar}
+  <div
+    class:sidebar-collapsed={
+      sidebarCollapsed
+    }
+    class="app-shell"
+  >
+    {#if $auth.session}
+      <!-- ===============================================
+           MOBILE HEADER
+           =============================================== -->
+      <header class="mobile-header">
+        <button
+          class="icon-button"
+          type="button"
+          aria-label="Open navigation"
+          aria-expanded={sidebarOpen}
+          aria-controls="app-sidebar"
+          onclick={() => {
+            sidebarOpen = true;
+          }}
         >
+          <svg
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <path d="M4 7h16"></path>
+            <path d="M4 12h16"></path>
+            <path d="M4 17h16"></path>
+          </svg>
+        </button>
+
+        <div class="mobile-page-title">
           <img
             src="/brand/softadastra-cloud.svg"
             alt=""
             aria-hidden="true"
           />
 
-          <span class="sidebar-brand__text">
-            <strong>Softadastra Cloud</strong>
-            <small>C++ workspace</small>
+          <span>
+            {mobilePageTitle}
           </span>
-        </a>
+        </div>
 
         <a
-          class:active={isActive('/notifications')}
-          class="icon-button header-action"
+          class:active={
+            isActive('/notifications')
+          }
+          class="icon-button"
           href="/notifications"
           aria-label="Notifications"
-          title="Notifications"
-          onclick={closeMobileSidebar}
         >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
+          <svg
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
             <path
               d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"
             ></path>
@@ -701,121 +608,322 @@
 
           {#if unread > 0}
             <span class="icon-button__count">
-              {unread > 99 ? '99+' : unread}
+              {unread > 99
+                ? '99+'
+                : unread}
             </span>
           {/if}
         </a>
-
-        <button
-          class="icon-button sidebar-collapse"
-          type="button"
-          aria-label="Close sidebar"
-          title="Close sidebar"
-          aria-controls="app-sidebar"
-          aria-expanded={!sidebarCollapsed}
-          onclick={toggleDesktopSidebar}
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <rect
-              x="3"
-              y="4"
-              width="18"
-              height="16"
-              rx="2"
-            ></rect>
-
-            <path d="M9 4v16"></path>
-            <path d="m16 9-3 3 3 3"></path>
-          </svg>
-        </button>
-
-        <button
-          class="icon-button sidebar-close"
-          type="button"
-          aria-label="Close navigation"
-          onclick={closeMobileSidebar}
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="m6 6 12 12M18 6 6 18"></path>
-          </svg>
-        </button>
       </header>
 
-      {#if $workspaceContext.workspaces.length > 0}
-        <section class="workspace-picker">
-          <div class="workspace-picker__top">
-            <WorkspaceAvatar workspace={$workspaceContext.selectedWorkspace} size="sm" />
+      <!-- ===============================================
+           MOBILE BACKDROP
+           =============================================== -->
+      <button
+        class:visible={sidebarOpen}
+        class="sidebar-backdrop"
+        type="button"
+        tabindex="-1"
+        aria-label="Close navigation"
+        onclick={closeMobileSidebar}
+      ></button>
 
-            <p class="workspace-picker__label">
-              Current workspace
-            </p>
-          </div>
-
-          <select
-            aria-label="Current workspace"
-            value={$workspaceContext.selectedWorkspace?.id ?? ''}
-            onchange={(event) =>
-              void selectWorkspace(event.currentTarget.value)}
-          >
-            {#each $workspaceContext.workspaces as workspace (workspace.id)}
-              <option value={workspace.id}>
-                {workspace.name}
-              </option>
-            {/each}
-          </select>
-
-          {#if $workspaceContext.selectedWorkspace}
-            <div class="workspace-picker__meta">
-              <RoleBadge
-                role={$workspaceContext.selectedWorkspace.current_user_role ?? 'viewer'}
-              />
-
-              <AccessScopeBadge
-                scope={$workspaceContext.selectedWorkspace.access_scope ?? 'entire_workspace'}
-              />
-            </div>
-          {/if}
-        </section>
+      {#if menuOpen}
+        <button
+          class="menu-dismiss"
+          type="button"
+          tabindex="-1"
+          aria-label="Close menu"
+          onclick={closeMenus}
+        ></button>
       {/if}
 
-      <nav
-        class="sidebar-nav"
-        aria-label="Primary navigation"
+      <!-- ===============================================
+           SIDEBAR
+           =============================================== -->
+      <aside
+        id="app-sidebar"
+        class:open={sidebarOpen}
+        class="app-sidebar"
       >
-        {#each visibleNavigationGroups as group (group.key)}
-          <section
-            class:contains-active={groupContainsActiveRoute(group)}
-            class="nav-group"
+        <header class="sidebar-header">
+          <a
+            class="sidebar-brand"
+            href={navigationHref(
+              '/dashboard'
+            )}
+            aria-label="Softadastra Cloud dashboard"
+            title="Softadastra Cloud"
+            onclick={closeMobileSidebar}
           >
-            <button
-              class="nav-group__toggle"
-              type="button"
-              aria-expanded={expandedGroups[group.key]}
-              aria-controls={`sidebar-group-${group.key}`}
-              onclick={() =>
-                toggleNavigationGroup(group.key)}
+            <img
+              src="/brand/softadastra-cloud.svg"
+              alt=""
+              aria-hidden="true"
+            />
+
+            <span class="sidebar-brand__text">
+              <strong>
+                Softadastra Cloud
+              </strong>
+
+              <small>
+                C++ workspace
+              </small>
+            </span>
+          </a>
+
+          <button
+            class="icon-button sidebar-collapse"
+            type="button"
+            aria-label={
+              sidebarCollapsed
+                ? 'Expand sidebar'
+                : 'Collapse sidebar'
+            }
+            title={
+              sidebarCollapsed
+                ? 'Expand sidebar'
+                : 'Collapse sidebar'
+            }
+            onclick={toggleDesktopSidebar}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              aria-hidden="true"
             >
-              <span>{group.label}</span>
+              <rect
+                x="3"
+                y="4"
+                width="18"
+                height="16"
+                rx="2"
+              ></rect>
+
+              <path d="M9 4v16"></path>
+
+              {#if sidebarCollapsed}
+                <path
+                  d="m13 9 3 3-3 3"
+                ></path>
+              {:else}
+                <path
+                  d="m16 9-3 3 3 3"
+                ></path>
+              {/if}
+            </svg>
+          </button>
+
+          <button
+            class="icon-button sidebar-close"
+            type="button"
+            aria-label="Close navigation"
+            onclick={closeMobileSidebar}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path
+                d="m6 6 12 12"
+              ></path>
+
+              <path
+                d="M18 6 6 18"
+              ></path>
+            </svg>
+          </button>
+        </header>
+
+        <!-- =============================================
+             WORKSPACE CONTEXT
+             ============================================= -->
+        <section class="workspace-control">
+          {#if
+            workspaces.length > 0 &&
+            selectedWorkspace
+          }
+            <button
+              class:open={
+                workspaceMenuOpen
+              }
+              class="workspace-trigger"
+              type="button"
+              title={
+                selectedWorkspace.name
+              }
+              aria-label="Change workspace"
+              aria-expanded={
+                workspaceMenuOpen
+              }
+              onclick={toggleWorkspaceMenu}
+            >
+              <WorkspaceAvatar
+                workspace={selectedWorkspace}
+                size="sm"
+              />
+
+              <span class="workspace-trigger__identity">
+                <small>
+                  Current workspace
+                </small>
+
+                <strong>
+                  {selectedWorkspace.name}
+                </strong>
+              </span>
 
               <svg
-                class:expanded={expandedGroups[group.key]}
+                class:expanded={
+                  workspaceMenuOpen
+                }
+                class="workspace-trigger__chevron"
                 viewBox="0 0 24 24"
                 aria-hidden="true"
               >
-                <path d="m9 7 5 5-5 5"></path>
+                <path
+                  d="m9 7 5 5-5 5"
+                ></path>
               </svg>
             </button>
 
-            {#if expandedGroups[group.key]}
+            {#if workspaceMenuOpen}
               <div
-                id={`sidebar-group-${group.key}`}
-                class="nav-group__items"
+                class="workspace-menu"
+                aria-label="Workspace switcher"
               >
+                <header class="workspace-menu__header">
+                  <div>
+                    <span>
+                      Workspaces
+                    </span>
+
+                    <small>
+                      Switch active context
+                    </small>
+                  </div>
+
+                  <a
+                    href={navigationHref(
+                      '/workspaces'
+                    )}
+                    onclick={closeMobileSidebar}
+                  >
+                    Manage
+                  </a>
+                </header>
+
+                <div class="workspace-menu__list">
+                  {#each workspaces as workspace (workspace.id)}
+                    <button
+                      class:selected={
+                        workspace.id ===
+                        selectedWorkspace.id
+                      }
+                      type="button"
+                      onclick={() =>
+                        void selectWorkspace(
+                          workspace.id
+                        )}
+                    >
+                      <WorkspaceAvatar
+                        workspace={workspace}
+                        size="sm"
+                      />
+
+                      <span>
+                        <strong>
+                          {workspace.name}
+                        </strong>
+
+                        <small>
+                          {workspace.current_user_role ??
+                            'viewer'}
+                        </small>
+                      </span>
+
+                      {#if
+                        workspace.id ===
+                        selectedWorkspace.id
+                      }
+                        <svg
+                          class="workspace-selected"
+                          viewBox="0 0 24 24"
+                          aria-hidden="true"
+                        >
+                          <path
+                            d="m5 12 4 4L19 6"
+                          ></path>
+                        </svg>
+                      {/if}
+                    </button>
+                  {/each}
+                </div>
+
+                <footer class="workspace-menu__footer">
+                  <RoleBadge
+                    role={selectedWorkspace.current_user_role ??
+                      'viewer'}
+                  />
+
+                  <AccessScopeBadge
+                    scope={selectedWorkspace.access_scope ??
+                      'entire_workspace'}
+                  />
+                </footer>
+              </div>
+            {/if}
+          {:else}
+            <a
+              class="workspace-create"
+              href="/workspaces"
+              title="Create workspace"
+              onclick={closeMobileSidebar}
+            >
+              <span aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path d="M12 5v14"></path>
+                  <path d="M5 12h14"></path>
+                </svg>
+              </span>
+
+              <span>
+                <strong>
+                  Create workspace
+                </strong>
+
+                <small>
+                  Start your first environment
+                </small>
+              </span>
+            </a>
+          {/if}
+        </section>
+
+        <!-- =============================================
+             PRIMARY NAVIGATION
+             ============================================= -->
+        <nav
+          class="sidebar-nav"
+          aria-label="Primary navigation"
+        >
+          {#each visibleNavigationGroups as group (group.key)}
+            <section class="nav-group">
+              <p class="nav-group__label">
+                {group.label}
+              </p>
+
+              <div class="nav-group__items">
                 {#each group.items as item (item.href)}
                   <a
-                    class:active={isActive(item.href)}
+                    class:active={
+                      isActive(item.href)
+                    }
                     class="nav-item"
-                    href={navigationHref(item.href)}
+                    href={navigationHref(
+                      item.href
+                    )}
+                    title={item.label}
                     aria-current={
                       isActive(item.href)
                         ? 'page'
@@ -823,283 +931,397 @@
                     }
                     onclick={closeMobileSidebar}
                   >
-                    <svg
-                      viewBox="0 0 24 24"
+                    <span
+                      class="nav-item__icon"
                       aria-hidden="true"
                     >
-                      <path d={item.icon}></path>
-                    </svg>
+                      <svg
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          d={item.icon}
+                        ></path>
+                      </svg>
 
-                    <span>{item.label}</span>
+                      {#if
+                        item.href ===
+                          '/notifications' &&
+                        unread > 0
+                      }
+                        <span
+                          class="nav-item__notification-dot"
+                        ></span>
+                      {/if}
+                    </span>
+
+                    <span class="nav-item__label">
+                      {item.label}
+                    </span>
+
+                    {#if
+                      item.href ===
+                        '/notifications' &&
+                      unread > 0
+                    }
+                      <span class="nav-item__count">
+                        {unread > 99
+                          ? '99+'
+                          : unread}
+                      </span>
+                    {/if}
                   </a>
                 {/each}
               </div>
-            {/if}
-          </section>
-        {/each}
-      </nav>
+            </section>
+          {/each}
+        </nav>
 
-      <footer class="sidebar-footer">
-        <div class="account-block">
-          {#if accountMenuOpen}
-            <div
-              class="account-menu"
-              aria-label="Account menu"
-            >
-              <button
-                class="account-menu__item"
-                type="button"
-                onclick={openAccount}
+        <!-- =============================================
+             ACCOUNT
+             ============================================= -->
+        <footer class="sidebar-footer">
+          <div class="account-block">
+            {#if accountMenuOpen}
+              <div
+                class="account-menu"
+                aria-label="Account menu"
               >
-                <svg
-                  viewBox="0 0 24 24"
-                  aria-hidden="true"
-                >
-                  <circle cx="12" cy="8" r="4"></circle>
-                  <path
-                    d="M4 21a8 8 0 0 1 16 0"
-                  ></path>
-                </svg>
+                <header class="account-menu__identity">
+                  <span
+                    class="account-menu__avatar"
+                    aria-hidden="true"
+                  >
+                    {#if accountAvatarUrl}
+                      <img
+                        src={accountAvatarUrl}
+                        alt=""
+                      />
+                    {:else}
+                      {initial}
+                    {/if}
+                  </span>
 
-                <span>Account settings</span>
-              </button>
+                  <span>
+                    <strong>
+                      {accountName}
+                    </strong>
 
-              {#if publicProfileHref}
+                    <small>
+                      {accountEmail}
+                    </small>
+                  </span>
+                </header>
+
                 <a
                   class="account-menu__item"
-                  href={publicProfileHref}
-                  onclick={() => {
-                    accountMenuOpen = false;
-                    closeMobileSidebar();
-                  }}
+                  href="/account"
+                  onclick={closeMobileSidebar}
                 >
                   <svg
                     viewBox="0 0 24 24"
                     aria-hidden="true"
                   >
-                    <path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z"></path>
-                    <path d="M3.6 9h16.8M3.6 15h16.8M12 3c2 2.4 3 5.4 3 9s-1 6.6-3 9M12 3c-2 2.4-3 5.4-3 9s1 6.6 3 9"></path>
+                    <circle
+                      cx="12"
+                      cy="8"
+                      r="4"
+                    ></circle>
+
+                    <path
+                      d="M4 21a8 8 0 0 1 16 0"
+                    ></path>
                   </svg>
 
-                  <span>View public profile</span>
+                  <span>
+                    Account settings
+                  </span>
                 </a>
-              {/if}
 
-              <div class="account-menu__separator"></div>
+                {#if publicProfileHref}
+                  <a
+                    class="account-menu__item"
+                    href={publicProfileHref}
+                    onclick={closeMobileSidebar}
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      aria-hidden="true"
+                    >
+                      <circle
+                        cx="12"
+                        cy="12"
+                        r="9"
+                      ></circle>
 
-              <button
-                class="account-menu__item account-menu__item--danger"
-                type="button"
-                onclick={logout}
-              >
-                <svg
-                  viewBox="0 0 24 24"
-                  aria-hidden="true"
+                      <path
+                        d="M3 12h18"
+                      ></path>
+
+                      <path
+                        d="M12 3a15 15 0 0 1 0 18"
+                      ></path>
+
+                      <path
+                        d="M12 3a15 15 0 0 0 0 18"
+                      ></path>
+                    </svg>
+
+                    <span>
+                      Public profile
+                    </span>
+                  </a>
+                {/if}
+
+                <button
+                  class="account-menu__item"
+                  type="button"
+                  onclick={() =>
+                    void refreshPageData()}
                 >
-                  <path
-                    d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"
-                  ></path>
-                </svg>
+                  <svg
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M21 12a9 9 0 0 1-15.5 6.2L3 15.7"
+                    ></path>
 
-                <span>Sign out</span>
-              </button>
-            </div>
-          {/if}
+                    <path
+                      d="M3 21v-5.3h5.3"
+                    ></path>
 
-          <button
-            class:open={accountMenuOpen}
-            class="account-row"
-            type="button"
-            title={accountEmail}
-            aria-label="Open account menu"
-            aria-expanded={accountMenuOpen}
-            onclick={toggleAccountMenu}
-          >
-            <span
-              class="account-row__avatar"
-              aria-hidden="true"
+                    <path
+                      d="M3 12A9 9 0 0 1 18.5 5.8L21 8.3"
+                    ></path>
+
+                    <path
+                      d="M21 3v5.3h-5.3"
+                    ></path>
+                  </svg>
+
+                  <span>
+                    Refresh data
+                  </span>
+                </button>
+
+                <div
+                  class="account-menu__separator"
+                ></div>
+
+                <button
+                  class="account-menu__item account-menu__item--danger"
+                  type="button"
+                  onclick={logout}
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"
+                    ></path>
+
+                    <path
+                      d="m16 17 5-5-5-5"
+                    ></path>
+
+                    <path
+                      d="M21 12H9"
+                    ></path>
+                  </svg>
+
+                  <span>Sign out</span>
+                </button>
+              </div>
+            {/if}
+
+            <button
+              class:open={accountMenuOpen}
+              class="account-row"
+              type="button"
+              title={accountEmail}
+              aria-label="Open account menu"
+              aria-expanded={accountMenuOpen}
+              onclick={toggleAccountMenu}
             >
-              {#if accountAvatarUrl}
-                <img src={accountAvatarUrl} alt="" />
-              {:else}
-                {initial}
-              {/if}
-            </span>
+              <span
+                class="account-row__avatar"
+                aria-hidden="true"
+              >
+                {#if accountAvatarUrl}
+                  <img
+                    src={accountAvatarUrl}
+                    alt=""
+                  />
+                {:else}
+                  {initial}
+                {/if}
+              </span>
 
-            <span class="account-row__identity">
-              <strong>{accountName}</strong>
+              <span class="account-row__identity">
+                <strong>
+                  {accountName}
+                </strong>
 
-              {#if accountEmail}
-                <small>{accountEmail}</small>
-              {/if}
-            </span>
+                {#if accountEmail}
+                  <small>
+                    {accountEmail}
+                  </small>
+                {/if}
+              </span>
 
-            <svg
-              class:expanded={accountMenuOpen}
-              class="account-row__chevron"
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-            >
-              <path d="m9 7 5 5-5 5"></path>
-            </svg>
-          </button>
-        </div>
-      </footer>
+              <svg
+                class:expanded={
+                  accountMenuOpen
+                }
+                class="account-row__chevron"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path
+                  d="m9 7 5 5-5 5"
+                ></path>
+              </svg>
+            </button>
+          </div>
+        </footer>
+      </aside>
+    {/if}
 
-      <button
-        class="sidebar-resizer"
-        type="button"
-        aria-label="Resize sidebar"
-        title="Drag to resize. Double-click to reset."
-        onpointerdown={startSidebarResize}
-        onkeydown={handleResizerKeydown}
-        ondblclick={resetSidebarWidth}
-      ></button>
-    </aside>
-  {/if}
-
-<main
-  class:authenticated={$auth.session}
-  class="app-main"
->
-  {#if $auth.session}
-    <header class="app-topbar" aria-label="Primary page header">
-      <div class="app-topbar__title">
-        <p>Softadastra Cloud</p>
-        <h1>{topbarTitle}</h1>
+    <!-- ===============================================
+         PAGE CONTENT
+         =============================================== -->
+    <main
+      class:authenticated={
+        Boolean($auth.session)
+      }
+      class="app-main"
+    >
+      <div class="app-main__inner">
+        <slot />
       </div>
-
-      {#if topbarContext}
-        <p class="app-topbar__context">{topbarContext}</p>
-      {/if}
-
-      <button
-        class="icon-button app-topbar__refresh"
-        type="button"
-        aria-label="Refresh page data"
-        title="Refresh page data"
-        onclick={refreshPageData}
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M21 12a9 9 0 0 1-15.5 6.2L3 15.7M3 21v-5.3h5.3M3 12A9 9 0 0 1 18.5 5.8L21 8.3M21 3v5.3h-5.3"></path>
-        </svg>
-      </button>
-    </header>
-  {/if}
-
-  <div
-    class:app-main__inner={true}
-  >
-    <slot />
+    </main>
   </div>
-</main>
-</div>
-
 {/if}
 
 <style>
   .app-shell {
     min-height: 100vh;
+    background: var(--bg);
   }
 
+  /* =====================================================
+     SHARED ICON BUTTON
+     ===================================================== */
+
+  .icon-button {
+    position: relative;
+    display: grid;
+    width: 36px;
+    height: 36px;
+    min-height: 36px;
+    flex: 0 0 auto;
+    place-items: center;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-muted);
+    padding: 0;
+    font: inherit;
+    cursor: pointer;
+    text-decoration: none;
+    transition:
+      border-color var(--speed) var(--ease),
+      background var(--speed) var(--ease),
+      color var(--speed) var(--ease);
+  }
+
+  .icon-button:hover,
+  .icon-button.active {
+    border-color: var(--line);
+    background: var(--bg-elevated);
+    color: var(--text);
+  }
+
+  .icon-button svg {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .icon-button__count {
+    position: absolute;
+    top: -4px;
+    right: -5px;
+    display: grid;
+    min-width: 18px;
+    height: 18px;
+    place-items: center;
+    border: 2px solid var(--bg);
+    border-radius: 999px;
+    background: var(--brand);
+    color: var(--brand-ink);
+    padding-inline: 4px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 750;
+  }
+
+  /* =====================================================
+     SIDEBAR
+     ===================================================== */
 
   .app-sidebar {
-    width: var(
-      --sidebar-current-width,
-      var(--sidebar-w)
-    );
-    overflow-x: hidden;
-    background: var(--bg-soft);
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 50;
+    display: flex;
+    width: 280px;
+    min-width: 0;
+    flex-direction: column;
+    overflow: visible;
+    border-right: 1px solid var(--line);
+    background: var(--bg-panel);
     transition:
       width var(--speed) var(--ease),
       transform var(--speed) var(--ease);
   }
 
   .app-main.authenticated {
-    margin-left: var(
-      --sidebar-current-width,
-      var(--sidebar-w)
-    );
-    padding-top: 0;
+    min-height: 100vh;
+    margin-left: 280px;
     transition:
-      margin-left var(--speed) var(--ease),
-      padding-left var(--speed) var(--ease);
+      margin-left var(--speed) var(--ease);
   }
 
-  .sidebar-resizing .app-sidebar,
-  .sidebar-resizing .app-main.authenticated {
-    transition: none;
+  .app-main__inner {
+    padding: 30px 34px 48px;
   }
 
-  .sidebar-collapsed .app-sidebar {
-    transform: translateX(calc(-100% - 8px));
-    pointer-events: none;
+  .sidebar-collapsed
+    .app-sidebar {
+    width: 72px;
   }
 
-  .sidebar-collapsed .app-main.authenticated {
-    margin-left: 0;
-    padding-left: 72px;
+  .sidebar-collapsed
+    .app-main.authenticated {
+    margin-left: 72px;
   }
 
-  .app-topbar {
-    position: sticky;
-    top: 0;
-    z-index: 30;
+  /* =====================================================
+     SIDEBAR HEADER
+     ===================================================== */
+
+  .sidebar-header {
     display: flex;
     min-height: 64px;
     align-items: center;
-    gap: 16px;
-    margin: 0 -34px 30px;
-    padding: 10px 34px;
-    border-bottom: 1px solid var(--line-soft);
-    background: color-mix(in srgb, var(--bg) 92%, transparent);
-    backdrop-filter: blur(14px);
-  }
-
-  .app-topbar__title {
-    min-width: 0;
-    margin-right: auto;
-  }
-
-  .app-topbar__title p {
-    margin: 0 0 2px;
-    color: var(--text-faint);
-    font-size: 11px;
-    font-weight: 650;
-    text-transform: uppercase;
-  }
-
-  .app-topbar__title h1 {
-    overflow: hidden;
-    margin: 0;
-    color: var(--text);
-    font-size: 18px;
-    font-weight: 750;
-    line-height: 1.15;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .app-topbar__context {
-    overflow: hidden;
-    max-width: 34ch;
-    margin: 0;
-    color: var(--text-soft);
-    font-size: 13px;
-    font-weight: 600;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .app-topbar__refresh {
-    flex: 0 0 auto;
-  }
-
-  
-
-  .sidebar-header {
-    min-height: 62px;
-    padding: 10px 10px 9px 12px;
+    gap: 7px;
+    padding: 10px 11px;
     border-bottom: 1px solid var(--line-soft);
   }
 
@@ -1109,12 +1331,20 @@
     flex: 1 1 auto;
     align-items: center;
     gap: 10px;
+    overflow: hidden;
+    border-radius: 8px;
+    color: var(--text);
     padding: 5px 6px;
+    text-decoration: none;
+  }
+
+  .sidebar-brand:hover {
+    background: var(--bg-elevated);
   }
 
   .sidebar-brand img {
-    width: 26px;
-    height: 26px;
+    width: 27px;
+    height: 27px;
     flex: 0 0 auto;
     object-fit: contain;
   }
@@ -1122,7 +1352,7 @@
   .sidebar-brand__text {
     display: grid;
     min-width: 0;
-    gap: 1px;
+    gap: 2px;
   }
 
   .sidebar-brand__text strong {
@@ -1130,145 +1360,377 @@
     color: var(--text);
     font-size: 12.5px;
     font-weight: 650;
-    letter-spacing: -0.01em;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .sidebar-brand__text small {
     overflow: hidden;
-    color: var(--text-faint);
-    font-size: 9.5px;
-    font-weight: 450;
+    color: var(--text-muted);
+    font-size: 10px;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .header-action,
-  .sidebar-collapse {
+  .sidebar-close {
+    display: none;
+  }
+
+  .sidebar-collapsed
+    .sidebar-header {
+    justify-content: center;
+    padding-inline: 8px;
+  }
+
+  .sidebar-collapsed
+    .sidebar-brand {
     flex: 0 0 auto;
+    padding: 4px;
   }
 
-  /* Workspace */
+  .sidebar-collapsed
+    .sidebar-brand__text {
+    display: none;
+  }
 
-  .workspace-picker {
+  .sidebar-collapsed
+    .sidebar-collapse {
+    position: absolute;
+    top: 14px;
+    left: calc(100% + 9px);
+    border-color: var(--line);
+    background: var(--bg-panel);
+  }
+
+  /* =====================================================
+     WORKSPACE CONTROL
+     ===================================================== */
+
+  .workspace-control {
+    position: relative;
+    padding: 10px 10px 8px;
+  }
+
+  .workspace-trigger,
+  .workspace-create {
     display: grid;
-    gap: 8px;
-    margin: 10px 10px 4px;
-    padding: 11px;
-    border: 1px solid var(--line-soft);
-    border-radius: var(--radius-sm);
-    background: var(--bg-ink-soft);
-  }
-
-  .workspace-picker__label {
-    color: var(--text-muted);
-    font-family: var(--font-mono);
-    font-size: 9px;
-    font-weight: 550;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-  }
-
-  .workspace-picker select {
     width: 100%;
-    min-height: 34px;
-    border-color: var(--line-strong);
-    background: var(--bg-panel-strong);
-    font-size: 12px;
-    font-weight: 550;
-  }
-
-  .workspace-picker__meta {
-    display: flex;
-    min-width: 0;
+    min-height: 58px;
+    grid-template-columns:
+      34px minmax(0, 1fr) 16px;
     align-items: center;
-    gap: 5px;
-    flex-wrap: wrap;
+    gap: 9px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    background: var(--bg-ink-soft);
+    color: var(--text);
+    padding: 7px 9px;
+    font: inherit;
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+    transition:
+      border-color var(--speed) var(--ease),
+      background var(--speed) var(--ease);
   }
 
-  /* Navigation */
+  .workspace-trigger:hover,
+  .workspace-trigger.open,
+  .workspace-create:hover {
+    border-color: var(--brand-line);
+    background: var(--brand-faint);
+  }
+
+  .workspace-trigger__identity {
+    display: grid;
+    min-width: 0;
+    gap: 2px;
+  }
+
+  .workspace-trigger__identity small {
+    color: var(--text-muted);
+    font-size: 10px;
+  }
+
+  .workspace-trigger__identity strong {
+    overflow: hidden;
+    color: var(--text-soft);
+    font-size: 11.5px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .workspace-trigger__chevron {
+    width: 15px;
+    height: 15px;
+    fill: none;
+    stroke: var(--text-muted);
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transition:
+      transform var(--speed) var(--ease);
+  }
+
+  .workspace-trigger__chevron.expanded {
+    transform: rotate(90deg);
+  }
+
+  .workspace-create {
+    grid-template-columns:
+      34px minmax(0, 1fr);
+  }
+
+  .workspace-create > span:first-child {
+    display: grid;
+    width: 32px;
+    height: 32px;
+    place-items: center;
+    border: 1px solid var(--brand-line);
+    border-radius: 8px;
+    color: var(--brand-soft);
+  }
+
+  .workspace-create svg {
+    width: 16px;
+    height: 16px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.9;
+    stroke-linecap: round;
+  }
+
+  .workspace-create > span:last-child {
+    display: grid;
+    gap: 2px;
+  }
+
+  .workspace-create strong {
+    color: var(--text-soft);
+    font-size: 11.5px;
+  }
+
+  .workspace-create small {
+    color: var(--text-muted);
+    font-size: 10px;
+  }
+
+  .workspace-menu {
+    position: absolute;
+    top: calc(100% - 1px);
+    right: 10px;
+    left: 10px;
+    z-index: 62;
+    overflow: hidden;
+    border: 1px solid var(--line-strong);
+    border-radius: 10px;
+    background: var(--bg-panel);
+  }
+
+  .workspace-menu__header {
+    display: flex;
+    min-height: 58px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .workspace-menu__header > div {
+    display: grid;
+    gap: 2px;
+  }
+
+  .workspace-menu__header span {
+    color: var(--text-soft);
+    font-size: 11.5px;
+    font-weight: 600;
+  }
+
+  .workspace-menu__header small {
+    color: var(--text-muted);
+    font-size: 10px;
+  }
+
+  .workspace-menu__header a {
+    color: var(--brand-soft);
+    font-size: 10.5px;
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .workspace-menu__header a:hover {
+    color: var(--brand-bright);
+  }
+
+  .workspace-menu__list {
+    display: grid;
+    max-height: 280px;
+    overflow-y: auto;
+    padding: 6px;
+  }
+
+  .workspace-menu__list button {
+    display: grid;
+    width: 100%;
+    min-height: 48px;
+    grid-template-columns:
+      32px minmax(0, 1fr) 16px;
+    align-items: center;
+    gap: 9px;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--text);
+    padding: 6px 7px;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .workspace-menu__list button:hover {
+    background: var(--bg-elevated);
+  }
+
+  .workspace-menu__list button.selected {
+    border-color: var(--brand-line);
+    background: var(--brand-faint);
+  }
+
+  .workspace-menu__list button > span {
+    display: grid;
+    min-width: 0;
+    gap: 2px;
+  }
+
+  .workspace-menu__list strong {
+    overflow: hidden;
+    color: var(--text-soft);
+    font-size: 11.5px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .workspace-menu__list small {
+    color: var(--text-muted);
+    font-size: 10px;
+    text-transform: capitalize;
+  }
+
+  .workspace-selected {
+    width: 14px;
+    height: 14px;
+    fill: none;
+    stroke: var(--brand-soft);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .workspace-menu__footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 9px 11px;
+    border-top: 1px solid var(--line-soft);
+  }
+
+  .sidebar-collapsed
+    .workspace-control {
+    padding-inline: 9px;
+  }
+
+  .sidebar-collapsed
+    .workspace-trigger {
+    min-height: 52px;
+    grid-template-columns: 1fr;
+    justify-items: center;
+    padding: 7px;
+  }
+
+  .sidebar-collapsed
+    .workspace-trigger__identity,
+  .sidebar-collapsed
+    .workspace-trigger__chevron {
+    display: none;
+  }
+
+  .sidebar-collapsed
+    .workspace-create {
+    min-height: 52px;
+    grid-template-columns: 1fr;
+    justify-items: center;
+    padding: 7px;
+  }
+
+  .sidebar-collapsed
+    .workspace-create >
+    span:last-child {
+    display: none;
+  }
+
+  .sidebar-collapsed
+    .workspace-menu {
+    top: 10px;
+    right: auto;
+    left: calc(100% + 8px);
+    width: 280px;
+  }
+
+  /* =====================================================
+     NAVIGATION
+     ===================================================== */
 
   .sidebar-nav {
     display: grid;
     min-height: 0;
     flex: 1 1 auto;
-    gap: 8px;
     align-content: start;
+    gap: 18px;
     overflow-x: hidden;
     overflow-y: auto;
-    padding: 12px 10px 22px;
+    padding: 11px 10px 24px;
   }
 
   .nav-group {
     display: grid;
-    gap: 3px;
+    gap: 5px;
   }
 
-  .nav-group__toggle {
-    display: flex;
-    width: 100%;
-    min-height: 28px;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: transparent;
+  .nav-group__label {
+    padding: 0 9px;
     color: var(--text-muted);
-    padding: 3px 8px;
     font-family: var(--font-mono);
-    font-size: 9.5px;
-    font-weight: 550;
-    letter-spacing: 0.11em;
-    text-align: left;
+    font-size: 10px;
+    font-weight: 650;
+    letter-spacing: 0.09em;
     text-transform: uppercase;
   }
 
-  .nav-group__toggle:hover:not(:disabled) {
-    background: var(--bg-elevated);
-    color: var(--text-soft);
-    transform: none;
-  }
-
-  .nav-group.contains-active
-    .nav-group__toggle {
-    color: var(--text-soft);
-  }
-
-  .nav-group__toggle svg {
-    width: 14px;
-    height: 14px;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 1.7;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-    transition: transform var(--speed) var(--ease);
-  }
-
-  .nav-group__toggle svg.expanded {
-    transform: rotate(90deg);
-  }
-
-
   .nav-group__items {
     display: grid;
-    gap: 2px;
+    gap: 3px;
   }
 
   .nav-item {
     position: relative;
     display: grid;
-    grid-template-columns: 18px minmax(0, 1fr);
-    gap: 9px;
+    min-height: 39px;
+    grid-template-columns:
+      20px minmax(0, 1fr) auto;
     align-items: center;
-    min-height: 36px;
-    padding: 6px 9px;
-    border-radius: var(--radius-sm);
+    gap: 9px;
+    border-radius: 8px;
     color: var(--text-soft);
+    padding: 7px 9px;
     font-size: 12.5px;
     font-weight: 500;
+    text-decoration: none;
+    transition:
+      background var(--speed) var(--ease),
+      color var(--speed) var(--ease);
   }
 
   .nav-item:hover {
@@ -1283,19 +1745,28 @@
   }
 
   .nav-item.active::before {
-    content: "";
+    content: '';
     position: absolute;
-    top: 7px;
-    bottom: 7px;
+    top: 8px;
+    bottom: 8px;
     left: 0;
     width: 2px;
-    border-radius: 0 2px 2px 0;
+    border-radius:
+      0 2px 2px 0;
     background: var(--brand);
   }
 
-  .nav-item svg {
-    width: 16px;
-    height: 16px;
+  .nav-item__icon {
+    position: relative;
+    display: grid;
+    width: 20px;
+    height: 20px;
+    place-items: center;
+  }
+
+  .nav-item__icon svg {
+    width: 17px;
+    height: 17px;
     fill: none;
     stroke: currentColor;
     stroke-width: 1.55;
@@ -1303,67 +1774,130 @@
     stroke-linejoin: round;
   }
 
-  .nav-item span {
+  .nav-item__notification-dot {
+    position: absolute;
+    top: -1px;
+    right: -1px;
+    width: 6px;
+    height: 6px;
+    border: 1px solid var(--bg-panel);
+    border-radius: 50%;
+    background: var(--brand);
+  }
+
+  .nav-item__label {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  /* Account */
+  .nav-item__count {
+    display: grid;
+    min-width: 22px;
+    height: 21px;
+    place-items: center;
+    border-radius: 999px;
+    background: var(--brand);
+    color: var(--brand-ink);
+    padding-inline: 5px;
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    font-weight: 750;
+  }
+
+  .sidebar-collapsed
+    .sidebar-nav {
+    gap: 10px;
+    padding-inline: 9px;
+  }
+
+  .sidebar-collapsed
+    .nav-group__label {
+    height: 1px;
+    overflow: hidden;
+    margin: 3px 7px;
+    background: var(--line-soft);
+    padding: 0;
+    color: transparent;
+  }
+
+  .sidebar-collapsed
+    .nav-item {
+    min-height: 43px;
+    grid-template-columns: 1fr;
+    justify-items: center;
+    padding: 8px;
+  }
+
+  .sidebar-collapsed
+    .nav-item__label,
+  .sidebar-collapsed
+    .nav-item__count {
+    display: none;
+  }
+
+  .sidebar-collapsed
+    .nav-item.active::before {
+    top: 9px;
+    bottom: 9px;
+  }
+
+  /* =====================================================
+     ACCOUNT
+     ===================================================== */
 
   .sidebar-footer {
     position: relative;
-    display: block;
-    padding: 10px 11px 12px;
+    padding: 10px;
     border-top: 1px solid var(--line-soft);
-    background: var(--bg-soft);
+    background: var(--bg-panel);
   }
 
   .account-block {
     position: relative;
-    width: 100%;
   }
 
   .account-row {
     display: grid;
-    grid-template-columns:
-      32px
-      minmax(0, 1fr)
-      16px;
-    gap: 10px;
-    align-items: center;
     width: 100%;
-    min-height: 52px;
+    min-height: 54px;
+    grid-template-columns:
+      34px minmax(0, 1fr) 16px;
+    align-items: center;
+    gap: 9px;
     border: 1px solid transparent;
-    border-radius: var(--radius-sm);
+    border-radius: 9px;
     background: transparent;
     color: var(--text);
     padding: 7px 8px;
+    font: inherit;
     text-align: left;
+    cursor: pointer;
   }
 
-  .account-row:hover:not(:disabled),
+  .account-row:hover,
   .account-row.open {
-    border-color: var(--line-soft);
+    border-color: var(--line);
     background: var(--bg-elevated);
-    transform: none;
   }
 
-  .account-row__avatar {
+  .account-row__avatar,
+  .account-menu__avatar {
     display: grid;
-    width: 32px;
-    height: 32px;
+    width: 33px;
+    height: 33px;
     place-items: center;
     overflow: hidden;
     border-radius: 50%;
     background: var(--brand);
     color: var(--brand-ink);
     font-size: 11px;
-    font-weight: 700;
+    font-weight: 750;
   }
 
-  .account-row__avatar img {
+  .account-row__avatar img,
+  .account-menu__avatar img {
     width: 100%;
     height: 100%;
     object-fit: cover;
@@ -1377,7 +1911,7 @@
 
   .account-row__identity strong {
     overflow: hidden;
-    color: var(--text);
+    color: var(--text-soft);
     font-size: 11.5px;
     font-weight: 600;
     text-overflow: ellipsis;
@@ -1387,8 +1921,7 @@
   .account-row__identity small {
     overflow: hidden;
     color: var(--text-muted);
-    font-size: 9.5px;
-    font-weight: 400;
+    font-size: 10px;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -1401,7 +1934,8 @@
     stroke-width: 1.7;
     stroke-linecap: round;
     stroke-linejoin: round;
-    transition: transform var(--speed) var(--ease);
+    transition:
+      transform var(--speed) var(--ease);
   }
 
   .account-row__chevron.expanded {
@@ -1413,36 +1947,73 @@
     right: 0;
     bottom: calc(100% + 8px);
     left: 0;
-    z-index: 8;
+    z-index: 62;
     display: grid;
-    gap: 3px;
+    overflow: hidden;
     border: 1px solid var(--line-strong);
-    border-radius: var(--radius-md);
-    background: var(--bg-panel-strong);
+    border-radius: 10px;
+    background: var(--bg-panel);
     padding: 6px;
-    box-shadow: var(--shadow-panel);
+  }
+
+  .account-menu__identity {
+    display: grid;
+    min-width: 0;
+    grid-template-columns:
+      34px minmax(0, 1fr);
+    align-items: center;
+    gap: 9px;
+    padding: 7px;
+    border-bottom: 1px solid var(--line-soft);
+    margin-bottom: 4px;
+  }
+
+  .account-menu__identity > span:last-child {
+    display: grid;
+    min-width: 0;
+    gap: 2px;
+  }
+
+  .account-menu__identity strong {
+    overflow: hidden;
+    color: var(--text-soft);
+    font-size: 11.5px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .account-menu__identity small {
+    overflow: hidden;
+    color: var(--text-muted);
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .account-menu__item {
     display: grid;
-    grid-template-columns: 18px minmax(0, 1fr);
-    gap: 9px;
-    align-items: center;
     width: 100%;
-    min-height: 34px;
+    min-height: 38px;
+    grid-template-columns:
+      18px minmax(0, 1fr);
+    align-items: center;
+    gap: 9px;
     border: 0;
+    border-radius: 7px;
     background: transparent;
     color: var(--text-soft);
-    padding: 6px 8px;
+    padding: 7px 8px;
+    font: inherit;
     font-size: 11.5px;
     font-weight: 550;
     text-align: left;
+    text-decoration: none;
+    cursor: pointer;
   }
 
-  .account-menu__item:hover:not(:disabled) {
+  .account-menu__item:hover {
     background: var(--bg-elevated);
     color: var(--text);
-    transform: none;
   }
 
   .account-menu__item svg {
@@ -1459,152 +2030,310 @@
     color: var(--danger);
   }
 
-  .account-menu__item--danger:hover:not(:disabled) {
+  .account-menu__item--danger:hover {
     background: var(--danger-faint);
     color: var(--danger);
   }
 
   .account-menu__separator {
     height: 1px;
-    margin: 2px 3px;
+    margin: 3px;
     background: var(--line-soft);
   }
 
-  /* Collapse and resize */
+  .sidebar-collapsed
+    .sidebar-footer {
+    padding-inline: 9px;
+  }
 
-  .sidebar-reopen {
+  .sidebar-collapsed
+    .account-row {
+    min-height: 52px;
+    grid-template-columns: 1fr;
+    justify-items: center;
+    padding: 7px;
+  }
+
+  .sidebar-collapsed
+    .account-row__identity,
+  .sidebar-collapsed
+    .account-row__chevron {
+    display: none;
+  }
+
+  .sidebar-collapsed
+    .account-menu {
+    right: auto;
+    bottom: 0;
+    left: calc(100% + 8px);
+    width: 270px;
+  }
+
+  /* =====================================================
+     DISMISS LAYERS
+     ===================================================== */
+
+  .menu-dismiss {
     position: fixed;
-    top: 16px;
-    left: 16px;
-    z-index: 38;
-    display: grid;
-    width: 36px;
-    height: 36px;
-    min-height: 36px;
-    place-items: center;
-    border: 1px solid var(--line-strong);
-    border-radius: var(--radius-sm);
-    background: var(--bg-panel);
-    color: var(--text-soft);
-    padding: 0;
-    box-shadow: var(--shadow-soft);
-  }
-
-  .sidebar-reopen:hover:not(:disabled) {
-    border-color: rgba(255, 255, 255, 0.18);
-    background: var(--bg-elevated);
-    color: var(--text);
-  }
-
-  .sidebar-reopen svg {
-    width: 18px;
-    height: 18px;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 1.6;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
-
-  .sidebar-resizer {
-    position: absolute;
-    top: 0;
-    right: -3px;
-    bottom: 0;
-    z-index: 3;
-    width: 7px;
-    height: 100%;
-    min-height: 0;
+    inset: 0;
+    z-index: 40;
+    width: 100%;
+    min-height: 100%;
     border: 0;
-    border-radius: 0;
     background: transparent;
     padding: 0;
-    cursor: col-resize;
-    touch-action: none;
+    cursor: default;
   }
 
-  .sidebar-resizer::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    right: 3px;
-    bottom: 0;
-    width: 1px;
-    background: transparent;
-    transition: background var(--speed) var(--ease);
+  .sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 42;
+    display: none;
+    width: 100%;
+    min-height: 100%;
+    border: 0;
+    background: rgba(0, 0, 0, 0.68);
+    padding: 0;
+    cursor: default;
   }
 
-  .sidebar-resizer:hover:not(:disabled),
-  .sidebar-resizer:active,
-  .sidebar-resizer:focus-visible {
-    background: transparent;
-    transform: none;
+  /* =====================================================
+     MOBILE HEADER
+     ===================================================== */
+
+  .mobile-header {
+    display: none;
   }
 
-  .sidebar-resizer:hover::before,
-  .sidebar-resizer:focus-visible::before,
-  .sidebar-resizing
-    .sidebar-resizer::before {
-    background: rgba(255, 255, 255, 0.24);
-  }
+  /* =====================================================
+     RESPONSIVE
+     ===================================================== */
 
-  .sidebar-resizer:focus-visible {
-    outline: none;
-    box-shadow: none;
+  @media (prefers-reduced-motion: reduce) {
+    .app-sidebar,
+    .app-main.authenticated,
+    .workspace-trigger__chevron,
+    .account-row__chevron {
+      transition: none;
+    }
   }
 
   @media (max-width: 880px) {
-    .sidebar-reopen,
-    .sidebar-collapse,
-    .sidebar-resizer {
-      display: none;
+    .mobile-header {
+      position: fixed;
+      top: 0;
+      right: 0;
+      left: 0;
+      z-index: 38;
+      display: grid;
+      min-height: 58px;
+      grid-template-columns:
+        38px minmax(0, 1fr) 38px;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 13px;
+      border-bottom: 1px solid var(--line-soft);
+      background: var(--bg);
     }
 
-    .app-sidebar {
+    .mobile-page-title {
+      display: flex;
+      min-width: 0;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .mobile-page-title img {
+      width: 22px;
+      height: 22px;
+      flex: 0 0 auto;
+      object-fit: contain;
+    }
+
+    .mobile-page-title span {
+      overflow: hidden;
+      color: var(--text-soft);
+      font-size: 12px;
+      font-weight: 600;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .app-sidebar,
+    .sidebar-collapsed
+      .app-sidebar {
       width: min(88vw, 320px);
-    }
-
-    .sidebar-collapsed .app-sidebar {
       transform: translateX(-100%);
-      pointer-events: auto;
     }
 
     .app-sidebar.open,
-    .sidebar-collapsed .app-sidebar.open {
+    .sidebar-collapsed
+      .app-sidebar.open {
       transform: translateX(0);
+    }
+
+    .sidebar-collapsed
+      .sidebar-header {
+      justify-content: initial;
+      padding-inline: 11px;
+    }
+
+    .sidebar-collapsed
+      .sidebar-brand {
+      flex: 1 1 auto;
+      padding: 5px 6px;
+    }
+
+    .sidebar-collapsed
+      .sidebar-brand__text {
+      display: grid;
+    }
+
+    .sidebar-collapse {
+      display: none;
+    }
+
+    .sidebar-close {
+      display: grid;
+    }
+
+    .sidebar-collapsed
+      .workspace-control {
+      padding-inline: 10px;
+    }
+
+    .sidebar-collapsed
+      .workspace-trigger {
+      min-height: 58px;
+      grid-template-columns:
+        34px minmax(0, 1fr) 16px;
+      justify-items: initial;
+      padding: 7px 9px;
+    }
+
+    .sidebar-collapsed
+      .workspace-trigger__identity {
+      display: grid;
+    }
+
+    .sidebar-collapsed
+      .workspace-trigger__chevron {
+      display: block;
+    }
+
+    .sidebar-collapsed
+      .workspace-create {
+      min-height: 58px;
+      grid-template-columns:
+        34px minmax(0, 1fr);
+      justify-items: initial;
+      padding: 7px 9px;
+    }
+
+    .sidebar-collapsed
+      .workspace-create >
+      span:last-child {
+      display: grid;
+    }
+
+    .sidebar-collapsed
+      .workspace-menu {
+      top: calc(100% - 1px);
+      right: 10px;
+      left: 10px;
+      width: auto;
+    }
+
+    .sidebar-collapsed
+      .sidebar-nav {
+      gap: 18px;
+      padding-inline: 10px;
+    }
+
+    .sidebar-collapsed
+      .nav-group__label {
+      height: auto;
+      overflow: visible;
+      margin: 0;
+      background: transparent;
+      padding: 0 9px;
+      color: var(--text-muted);
+    }
+
+    .sidebar-collapsed
+      .nav-item {
+      min-height: 39px;
+      grid-template-columns:
+        20px minmax(0, 1fr) auto;
+      justify-items: initial;
+      padding: 7px 9px;
+    }
+
+    .sidebar-collapsed
+      .nav-item__label,
+    .sidebar-collapsed
+      .nav-item__count {
+      display: block;
+    }
+
+    .sidebar-collapsed
+      .account-row {
+      min-height: 54px;
+      grid-template-columns:
+        34px minmax(0, 1fr) 16px;
+      justify-items: initial;
+      padding: 7px 8px;
+    }
+
+    .sidebar-collapsed
+      .account-row__identity {
+      display: grid;
+    }
+
+    .sidebar-collapsed
+      .account-row__chevron {
+      display: block;
+    }
+
+    .sidebar-collapsed
+      .account-menu {
+      right: 0;
+      bottom: calc(100% + 8px);
+      left: 0;
+      width: auto;
     }
 
     .app-main.authenticated,
     .sidebar-collapsed
       .app-main.authenticated {
       margin-left: 0;
-      padding: 0 14px 48px;
+      padding-top: 58px;
     }
 
-    .app-topbar {
-      min-height: 58px;
-      margin: 0 -14px 20px;
-      padding: 8px 14px;
+    .app-main__inner {
+      padding: 22px 14px 48px;
     }
 
-    .app-topbar__title p {
-      display: none;
+    .sidebar-backdrop.visible {
+      display: block;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .app-main__inner {
+      padding:
+        18px 11px 42px;
     }
 
-    .app-topbar__title h1 {
-      font-size: 16px;
+    .mobile-header {
+      padding-inline: 10px;
     }
 
-    .app-topbar__context {
-      display: none;
-    }
-
-    .sidebar-header {
-      min-height: 58px;
-    }
-
-    .workspace-picker {
-      margin-top: 8px;
+    .workspace-menu__footer {
+      align-items: flex-start;
+      flex-direction: column;
     }
   }
 </style>

@@ -14,6 +14,8 @@
   import type { PublicActivityEvent, PublicPackageSummary, PublicProfileResponse } from '$lib/api/types';
 
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? (browser ? window.location.protocol + '//' + window.location.hostname + ':8080' : '');
+  const SITE_URL = import.meta.env.VITE_PUBLIC_SITE_URL ?? 'https://business.softadastra.com';
+  const OG_IMAGE_URL = SITE_URL + '/og-logo.png';
   const validTabs = new Set(['overview', 'packages', 'activity']);
 
   function isEmailLike(value?: string) {
@@ -63,6 +65,18 @@
   $: initial = publicDisplayName
     .slice(0, 1)
     .toUpperCase();
+
+  $: profileDescription =
+    publicUsername
+      ? publicDisplayName +
+        ' (@' +
+        publicUsername +
+        ') on Softadastra Cloud.'
+      : publicDisplayName +
+        ' on Softadastra Cloud.';
+
+  $: profileUrl =
+    SITE_URL + '/u/' + encodeURIComponent(username);
 
   $: avatarUrl = profile?.avatar_url
     ? (
@@ -284,6 +298,18 @@ $: canCustomizePins = isOwner;
 
 <svelte:head>
   <title>{publicDisplayName} | Softadastra Cloud</title>
+  <meta name="description" content={profileDescription} />
+  <link rel="canonical" href={profileUrl} />
+
+  <meta property="og:type" content="profile" />
+  <meta property="og:title" content={publicDisplayName + ' | Softadastra Cloud'} />
+  <meta property="og:description" content={profileDescription} />
+  <meta property="og:url" content={profileUrl} />
+  <meta property="og:image" content={avatarUrl || OG_IMAGE_URL} />
+
+  <meta name="twitter:title" content={publicDisplayName + ' | Softadastra Cloud'} />
+  <meta name="twitter:description" content={profileDescription} />
+  <meta name="twitter:image" content={avatarUrl || OG_IMAGE_URL} />
 </svelte:head>
 
 {#if loading}

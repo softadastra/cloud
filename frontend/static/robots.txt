@@ -1,0 +1,17 @@
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /account
+Disallow: /dashboard
+Disallow: /workspaces
+Disallow: /projects
+Disallow: /packages
+Disallow: /package-versions
+Disallow: /build-reports
+Disallow: /lockfiles
+Disallow: /members
+Disallow: /tokens
+Disallow: /notifications
+Disallow: /feedback
+
+Sitemap: https://business.softadastra.com/sitemap.xml
