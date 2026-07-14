@@ -17,10 +17,11 @@ echo "==> Build Softadastra Cloud"
 "$VIX" build --preset release
 
 echo "==> Restart service"
-"$VIX" service restart
+sudo -n /usr/bin/systemctl restart cloud.service
 
 echo "==> Check service"
-"$VIX" service status
+sudo -n /usr/bin/systemctl is-active --quiet cloud.service
+sudo -n /usr/bin/systemctl status cloud.service --no-pager
 
 echo "==> Waiting for local HTTP health"
 healthy=false
