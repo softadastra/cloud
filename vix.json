@@ -16,7 +16,7 @@
     },
     "deploy": {
       "branch": "main",
-      "build": "vix build",
+      "build": "vix build --preset release",
       "health_local": true,
       "health_public": false,
       "log_lines": 80,
@@ -45,7 +45,7 @@
       "public": "https://api.softadastra.com/health",
       "service": "cloud",
       "timeout_ms": 2000,
-      "websocket": ""
+      "websocket": "wss://api.softadastra.com/ws"
     },
     "logs": {
       "lines": 120,
@@ -58,21 +58,29 @@
       "websocket": 9090
     },
     "proxy": {
-      "certificate": "",
-      "certificate_key": "",
       "domain": "api.softadastra.com",
-      "tls": true,
-      "type": "nginx",
-      "websocket_path": "/ws"
+      "http": {
+        "port": 8080
+      },
+      "websocket": {
+        "enabled": true,
+        "path": "/ws",
+        "port": 9090
+      },
+      "tls": {
+        "enabled": true,
+        "certificate": "/etc/letsencrypt/live/api.softadastra.com/fullchain.pem",
+        "certificate_key": "/etc/letsencrypt/live/api.softadastra.com/privkey.pem"
+      }
     },
     "service": {
-      "exec": "bin/cloud",
+      "exec": "/home/gaspard/softadastra/cloud/build-release/bin/cloud",
       "limit_nofile": 65535,
       "name": "cloud",
       "restart": "always",
       "restart_sec": 3,
       "user": "gaspard",
-      "working_dir": "."
+      "working_dir": "/home/gaspard/softadastra/cloud"
     },
     "websocket": {
       "heartbeat": true,
@@ -80,12 +88,12 @@
       "local_url": "ws://127.0.0.1:9090/ws",
       "path": "/ws",
       "port": 9090,
-      "public_url": "",
+      "public_url": "wss://api.softadastra.com/ws",
       "timeout_ms": 5000
     }
   },
   "tasks": {
-    "build": "vix build",
+    "build": "vix build --preset release",
     "check": "vix check --tests --run",
     "deploy": "vix deploy",
     "dev": "vix dev",
