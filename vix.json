@@ -62,15 +62,15 @@
       "http": {
         "port": 8080
       },
+      "tls": {
+        "certificate": "/etc/letsencrypt/live/api.softadastra.com/fullchain.pem",
+        "certificate_key": "/etc/letsencrypt/live/api.softadastra.com/privkey.pem",
+        "enabled": true
+      },
       "websocket": {
         "enabled": true,
         "path": "/ws",
         "port": 9090
-      },
-      "tls": {
-        "enabled": true,
-        "certificate": "/etc/letsencrypt/live/api.softadastra.com/fullchain.pem",
-        "certificate_key": "/etc/letsencrypt/live/api.softadastra.com/privkey.pem"
       }
     },
     "service": {
@@ -80,7 +80,10 @@
       "restart": "always",
       "restart_sec": 3,
       "user": "gaspard",
-      "working_dir": "/home/gaspard/softadastra/cloud"
+      "working_dir": "/home/gaspard/softadastra/cloud",
+      "environment": {
+        "VIX_CLI_PATH": "/home/gaspard/.local/bin/vix"
+      }
     },
     "websocket": {
       "heartbeat": true,
