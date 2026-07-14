@@ -35,7 +35,8 @@
         "APP_ENV",
         "SERVER_PORT",
         "DATABASE_ENGINE",
-        "DATABASE_SQLITE_PATH"
+        "DATABASE_SQLITE_PATH",
+        "CORS_ALLOWED_ORIGINS"
       ]
     },
     "health": {
@@ -74,16 +75,16 @@
       }
     },
     "service": {
+      "environment": {
+        "VIX_CLI_PATH": "/home/gaspard/.local/bin/vix"
+      },
       "exec": "/home/gaspard/softadastra/cloud/build-release/bin/cloud",
       "limit_nofile": 65535,
       "name": "cloud",
       "restart": "always",
       "restart_sec": 3,
       "user": "gaspard",
-      "working_dir": "/home/gaspard/softadastra/cloud",
-      "environment": {
-        "VIX_CLI_PATH": "/home/gaspard/.local/bin/vix"
-      }
+      "working_dir": "/home/gaspard/softadastra/cloud"
     },
     "websocket": {
       "heartbeat": true,
