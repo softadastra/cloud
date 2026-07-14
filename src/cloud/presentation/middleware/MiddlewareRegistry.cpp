@@ -27,7 +27,8 @@ namespace cloud::presentation::middleware
     cors_options.allowed_origins = {
       "http://localhost:5173",
       "http://127.0.0.1:5173",
-      "http://192.168.1.6:5173"
+      "http://192.168.1.6:5173",
+      "https://cloud.softadastra.com"
     };
     cors_options.allow_credentials = true;
     cors_options.allow_methods = {"GET", "POST", "OPTIONS"};
@@ -58,7 +59,8 @@ namespace cloud::presentation::middleware
 
       if (origin == "http://localhost:5173" ||
           origin == "http://127.0.0.1:5173" ||
-          origin == "http://192.168.1.6:5173")
+          origin == "http://192.168.1.6:5173" ||
+          origin == "https://cloud.softadastra.com")
       {
         res.header("Access-Control-Allow-Origin", origin);
         res.header("Access-Control-Allow-Credentials", "true");
