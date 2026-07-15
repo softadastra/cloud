@@ -5,6 +5,13 @@ export function login(email: string, password: string) {
   return api.post<LoginData>('/api/auth/login', { email, password });
 }
 
+export function authorizeCliLogin(state: string, redirectUri: string) {
+  return api.post<{ code: string; expires_in: number }>('/api/auth/cli/authorize', {
+    state,
+    redirect_uri: redirectUri
+  });
+}
+
 export function register(name: string, email: string, password: string) {
   return api.post<RegisterData>('/api/auth/register', { name, email, password });
 }

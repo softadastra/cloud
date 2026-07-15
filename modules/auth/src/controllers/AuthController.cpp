@@ -31,6 +31,8 @@
 #include <fstream>
 #include <iomanip>
 #include <memory>
+#include <mutex>
+#include <random>
 #include <sstream>
 #include <string>
 #include <unordered_map>
@@ -38,6 +40,7 @@
 #include <vix.hpp>
 #include <vix/config/Config.hpp>
 #include <vix/db/db.hpp>
+#include <vix/db/Sha256.hpp>
 
 namespace cloud::auth::controllers
 {
@@ -232,6 +235,110 @@ namespace cloud::auth::controllers
       }
 
       return {};
+    }
+
+
+    constexpr int cli_auth_code_ttl_seconds = 120;
+
+    struct CliAuthCode
+    {
+      std::string state;
+      std::string redirect_uri;
+      std::string session_id;
+      std::string user_id;
+      std::chrono::steady_clock::time_point expires_at;
+    };
+
+    std::mutex cli_auth_mutex;
+    std::unordered_map<std::string, CliAuthCode> cli_auth_codes;
+
+    bool is_cli_state_safe(const std::string &value)
+    {
+      if (value.size() < 32 || value.size() > 256)
+      {
+        return false;
+      }
+
+      for (const auto ch : value)
+      {
+        const auto c = static_cast<unsigned char>(ch);
+        if (std::isalnum(c) == 0 && ch != '-' && ch != '_' && ch != '.')
+        {
+          return false;
+        }
+      }
+
+      return true;
+    }
+
+    bool is_loopback_cli_redirect(const std::string &value)
+    {
+      const std::string prefix = "http://127.0.0.1:";
+      if (value.rfind(prefix, 0) != 0)
+      {
+        return false;
+      }
+
+      const auto path_pos = value.find('/', prefix.size());
+      if (path_pos == std::string::npos || value.substr(path_pos) != "/callback")
+      {
+        return false;
+      }
+
+      const auto port = value.substr(prefix.size(), path_pos - prefix.size());
+      if (port.empty() || port.size() > 5)
+      {
+        return false;
+      }
+
+      for (const auto ch : port)
+      {
+        if (std::isdigit(static_cast<unsigned char>(ch)) == 0)
+        {
+          return false;
+        }
+      }
+
+      try
+      {
+        const auto number = std::stoi(port);
+        return number > 0 && number <= 65535;
+      }
+      catch (...)
+      {
+        return false;
+      }
+    }
+
+    std::string secure_random_hex(std::size_t bytes)
+    {
+      static constexpr char digits[] = "0123456789abcdef";
+      std::random_device rng;
+      std::string out;
+      out.reserve(bytes * 2);
+      for (std::size_t i = 0; i < bytes; ++i)
+      {
+        const auto value = static_cast<unsigned int>(rng()) & 0xffU;
+        out.push_back(digits[(value >> 4U) & 0x0fU]);
+        out.push_back(digits[value & 0x0fU]);
+      }
+      return out;
+    }
+
+    void purge_expired_cli_auth_codes_locked()
+    {
+      const auto now = std::chrono::steady_clock::now();
+      for (auto it = cli_auth_codes.begin(); it != cli_auth_codes.end();)
+      {
+        if (it->second.expires_at <= now)
+        {
+          it = cli_auth_codes.erase(it);
+        }
+        else
+        {
+          ++it;
+        }
+      }
     }
 
     bool safe_path_segment(const std::string &value)
@@ -2057,6 +2164,152 @@ namespace cloud::auth::controllers
                   "value", result.token.value(),
                   "issuer", result.token.issuer(),
                   "expires_at", result.token.expires_at()))); });
+
+
+    app.post("/api/auth/cli/authorize", [](vix::Request &req, vix::Response &res)
+             {
+      const auto &body = req.json();
+
+      if (!require_json_object(body, res))
+      {
+        return;
+      }
+
+      const auto state = body.value("state", "");
+      const auto redirect_uri = body.value("redirect_uri", "");
+
+      if (!is_cli_state_safe(state) || !is_loopback_cli_redirect(redirect_uri))
+      {
+        json_error(res, 400, "invalid_cli_login_request", "Invalid CLI login request.");
+        return;
+      }
+
+      const auto session_id = bearer_session_id(req);
+      auto session = auth_service().authenticate_session(session_id);
+
+      if (session.failed())
+      {
+        support::write_auth_error(res, session.error());
+        return;
+      }
+
+      std::string code;
+      std::string code_hash;
+      {
+        std::lock_guard<std::mutex> lock(cli_auth_mutex);
+        purge_expired_cli_auth_codes_locked();
+        do
+        {
+          code = secure_random_hex(32);
+          code_hash = vix::db::sha256_hex(code);
+        } while (cli_auth_codes.find(code_hash) != cli_auth_codes.end());
+
+        cli_auth_codes.emplace(
+            code_hash,
+            CliAuthCode{
+                state,
+                redirect_uri,
+                session.value().id(),
+                session.value().user_id(),
+                std::chrono::steady_clock::now() + std::chrono::seconds(cli_auth_code_ttl_seconds)});
+      }
+
+      json_ok(
+          res,
+          vix::json::o(
+              "code", code,
+              "expires_in", cli_auth_code_ttl_seconds)); });
+
+    app.post("/api/auth/cli/exchange", [](vix::Request &req, vix::Response &res)
+             {
+      const auto &body = req.json();
+
+      if (!require_json_object(body, res))
+      {
+        return;
+      }
+
+      const auto code = body.value("code", "");
+      const auto state = body.value("state", "");
+      const auto redirect_uri = body.value("redirect_uri", "");
+
+      if (code.empty() || !is_cli_state_safe(state) || !is_loopback_cli_redirect(redirect_uri))
+      {
+        json_error(res, 400, "invalid_cli_login_request", "Invalid CLI login request.");
+        return;
+      }
+
+      CliAuthCode grant;
+      bool found = false;
+      const auto code_hash = vix::db::sha256_hex(code);
+      {
+        std::lock_guard<std::mutex> lock(cli_auth_mutex);
+        purge_expired_cli_auth_codes_locked();
+        auto it = cli_auth_codes.find(code_hash);
+        if (it != cli_auth_codes.end())
+        {
+          grant = it->second;
+          cli_auth_codes.erase(it);
+          found = true;
+        }
+      }
+
+      if (!found || grant.state != state || grant.redirect_uri != redirect_uri)
+      {
+        json_error(res, 401, "invalid_cli_code", "The CLI authorization code is invalid or expired.");
+        return;
+      }
+
+      auto session = auth_service().authenticate_session(grant.session_id);
+
+      if (session.failed())
+      {
+        support::write_auth_error(res, session.error());
+        return;
+      }
+
+      auto profile = auth_service().user_profile(session.value().user_id());
+
+      if (profile.failed())
+      {
+        write_account_error(res, profile.error());
+        return;
+      }
+
+      auto token = auth_service().issue_token(session.value().user_id());
+
+      if (token.failed())
+      {
+        support::write_auth_error(res, token.error());
+        return;
+      }
+
+      vix::json::Json user_json = profile.value().to_json();
+      vix::json::Json platform_admin = vix::json::Json{};
+      try
+      {
+        vix::config::Config cfg{".env"};
+        vix::db::Database db{cfg};
+        platform_admin = platform_admin_json(db, profile.value().id, profile.value().email);
+        user_json["platform_admin"] = platform_admin;
+      }
+      catch (...)
+      {
+        user_json["platform_admin"] = platform_admin;
+      }
+
+      json_ok(
+          res,
+          vix::json::o(
+              "user", user_json,
+              "platform_admin", platform_admin,
+              "session", vix::json::o(
+                  "id", session.value().id(),
+                  "expires_at", session.value().expires_at()),
+              "token", vix::json::o(
+                  "value", token.value().value(),
+                  "issuer", token.value().issuer(),
+                  "expires_at", token.value().expires_at()))); });
 
     app.post("/api/auth/logout", [](vix::Request &req, vix::Response &res)
              {
