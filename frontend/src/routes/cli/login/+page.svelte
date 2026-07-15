@@ -62,7 +62,24 @@
       const callback = new URL(redirectUri);
       callback.searchParams.set('code', data.code);
       callback.searchParams.set('state', state);
-      window.location.replace(callback.toString());
+
+      status = 'Connecting your terminal...';
+
+      try {
+        await fetch(callback.toString(), {
+          method: 'GET',
+          mode: 'no-cors',
+          cache: 'no-store',
+          keepalive: true
+        });
+      } catch {
+        const image = new Image();
+        image.src = callback.toString();
+      }
+
+      window.setTimeout(() => {
+        void goto('/cli/success', { replaceState: true });
+      }, 900);
     } catch (err) {
       error = err instanceof ApiError ? err.message : 'Unable to authorize the Vix CLI.';
       status = '';
