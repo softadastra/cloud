@@ -1,56 +1,21 @@
 <script lang="ts">
   import { browser, dev } from '$app/environment';
   import { afterNavigate } from '$app/navigation';
-  import { PUBLIC_GA_MEASUREMENT_ID } from '$env/static/public';
 
-  const measurementId = PUBLIC_GA_MEASUREMENT_ID;
+  const measurementId = 'G-E765GE5YQD';
   const analyticsHost = 'cloud.softadastra.com';
-  const scriptId = 'google-analytics-gtag';
 
-  let initialized = false;
   let lastPageLocation = '';
+  let initialNavigationTracked = false;
 
   const shouldEnableAnalytics = () =>
     browser &&
     !dev &&
-    measurementId.length > 0 &&
-    window.location.hostname === analyticsHost;
-
-  const ensureGoogleAnalytics = () => {
-    if (!shouldEnableAnalytics()) {
-      return false;
-    }
-
-    if (initialized) {
-      return true;
-    }
-
-    window.dataLayer = window.dataLayer ?? [];
-    window.gtag =
-      window.gtag ??
-      ((...args: Parameters<Window['gtag']>) => {
-        window.dataLayer.push(args);
-      });
-
-    if (!document.getElementById(scriptId)) {
-      const script = document.createElement('script');
-      script.id = scriptId;
-      script.async = true;
-      script.src = `https://www.googletagmanager.com/gtag/js?id=${measurementId}`;
-      document.head.appendChild(script);
-    }
-
-    window.gtag('js', new Date());
-    window.gtag('config', measurementId, {
-      send_page_view: false
-    });
-
-    initialized = true;
-    return true;
-  };
+    window.location.hostname === analyticsHost &&
+    typeof window.gtag === 'function';
 
   const trackPageView = () => {
-    if (!ensureGoogleAnalytics()) {
+    if (!shouldEnableAnalytics()) {
       return;
     }
 
@@ -70,6 +35,12 @@
   };
 
   afterNavigate(() => {
+    if (!initialNavigationTracked) {
+      initialNavigationTracked = true;
+      lastPageLocation = browser ? window.location.href : '';
+      return;
+    }
+
     trackPageView();
   });
 </script>
