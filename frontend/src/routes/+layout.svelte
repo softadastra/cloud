@@ -1,11 +1,12 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import AppShell from '$lib/components/AppShell.svelte';
+  import GoogleAnalytics from '$lib/components/GoogleAnalytics.svelte';
   import '../styles.css';
 
   const siteUrl =
     import.meta.env.VITE_PUBLIC_SITE_URL ??
-    'https://business.softadastra.com';
+    'https://cloud.softadastra.com';
 
   const defaultTitle =
     'Softadastra Cloud | Shared workspaces for Vix projects';
@@ -16,6 +17,15 @@
   const ogImage = siteUrl + '/og-logo.png';
 
   $: canonicalUrl = siteUrl + $page.url.pathname;
+
+  $: isIndexableRoute =
+    $page.url.pathname === '/' ||
+    $page.url.pathname === '/support' ||
+    $page.url.pathname === '/supporters' ||
+    $page.url.pathname.startsWith('/u/') ||
+    $page.url.pathname.startsWith('/p/');
+
+  $: robotsContent = isIndexableRoute ? 'index,follow' : 'noindex,nofollow';
 
   $: structuredData = JSON.stringify({
     '@context': 'https://schema.org',
@@ -65,14 +75,19 @@
   />
 
   <meta name="author" content="Softadastra" />
+  <meta name="robots" content={robotsContent} />
 
-  <link rel="canonical" href={canonicalUrl} />
+  {#if isIndexableRoute}
+    <link rel="canonical" href={canonicalUrl} />
+  {/if}
 
   <meta property="og:site_name" content="Softadastra Cloud" />
   <meta property="og:type" content="website" />
   <meta property="og:title" content={defaultTitle} />
   <meta property="og:description" content={defaultDescription} />
-  <meta property="og:url" content={canonicalUrl} />
+  {#if isIndexableRoute}
+    <meta property="og:url" content={canonicalUrl} />
+  {/if}
   <meta property="og:image" content={ogImage} />
   <meta property="og:image:secure_url" content={ogImage} />
   <meta property="og:image:type" content="image/png" />
@@ -91,6 +106,8 @@
     {structuredData}
   </script>
 </svelte:head>
+
+<GoogleAnalytics />
 
 <AppShell>
   {#key $page.url.pathname + $page.url.search}

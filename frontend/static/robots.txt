@@ -14,4 +14,4 @@ Disallow: /tokens
 Disallow: /notifications
 Disallow: /feedback
 
-Sitemap: https://business.softadastra.com/sitemap.xml
+Sitemap: https://cloud.softadastra.com/sitemap.xml

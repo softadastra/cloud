@@ -11,7 +11,7 @@
   import type { PublicPackageActivityEvent, PublicPackageDetail } from '$lib/api/types';
 
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? (browser ? window.location.protocol + '//' + window.location.hostname + ':8080' : '');
-  const SITE_URL = import.meta.env.VITE_PUBLIC_SITE_URL ?? 'https://business.softadastra.com';
+  const SITE_URL = import.meta.env.VITE_PUBLIC_SITE_URL ?? 'https://cloud.softadastra.com';
   const OG_IMAGE_URL = SITE_URL + '/og-logo.png';
 
   let packageDetail: PublicPackageDetail | null = null;
@@ -108,6 +108,7 @@
   <meta property="og:description" content={packageDescription} />
   <meta property="og:url" content={packageUrl} />
   <meta property="og:image" content={OG_IMAGE_URL} />
+  <meta property="og:image:secure_url" content={OG_IMAGE_URL} />
 
   <meta name="twitter:title" content={fullName + ' | Softadastra Cloud'} />
   <meta name="twitter:description" content={packageDescription} />

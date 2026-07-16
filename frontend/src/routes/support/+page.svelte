@@ -161,11 +161,13 @@
 
   <meta property="og:title" content="Support Vix and Softadastra Cloud" />
   <meta property="og:description" content="Support the continued development of Vix and Softadastra Cloud through the Founding Supporters program." />
-  <meta property="og:url" content="https://business.softadastra.com/support" />
-  <meta property="og:image" content="https://business.softadastra.com/og-logo.png" />
+  <meta property="og:url" content="https://cloud.softadastra.com/support" />
+  <meta property="og:image" content="https://cloud.softadastra.com/og-logo.png" />
+  <meta property="og:image:secure_url" content="https://cloud.softadastra.com/og-logo.png" />
 
   <meta name="twitter:title" content="Support Vix and Softadastra Cloud" />
   <meta name="twitter:description" content="Support the continued development of Vix and Softadastra Cloud through the Founding Supporters program." />
+  <meta name="twitter:image" content="https://cloud.softadastra.com/og-logo.png" />
 </svelte:head>
 
 <main class="support-page">

@@ -80,12 +80,13 @@
 
   <meta property="og:title" content="Softadastra Cloud | Shared workspaces for Vix projects" />
   <meta property="og:description" content="Build C++ applications locally with Vix and organize private packages, lockfiles, build reports, permissions, and project activity in Softadastra Cloud." />
-  <meta property="og:url" content="https://business.softadastra.com/" />
-  <meta property="og:image" content="https://business.softadastra.com/og-logo.png" />
+  <meta property="og:url" content="https://cloud.softadastra.com/" />
+  <meta property="og:image" content="https://cloud.softadastra.com/og-logo.png" />
+  <meta property="og:image:secure_url" content="https://cloud.softadastra.com/og-logo.png" />
 
   <meta name="twitter:title" content="Softadastra Cloud | Shared workspaces for Vix projects" />
   <meta name="twitter:description" content="Build C++ applications locally with Vix and organize private packages, lockfiles, build reports, permissions, and project activity in Softadastra Cloud." />
-  <meta name="twitter:image" content="https://business.softadastra.com/og-logo.png" />
+  <meta name="twitter:image" content="https://cloud.softadastra.com/og-logo.png" />
 </svelte:head>
 
 <main class:is-ready={pageReady} class="home-page">

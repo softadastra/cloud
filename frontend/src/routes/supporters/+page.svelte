@@ -233,11 +233,13 @@
 
   <meta property="og:title" content="Founding Supporters | Softadastra Cloud" />
   <meta property="og:description" content="Meet the founding supporters and builders helping Vix and Softadastra Cloud grow into sustainable C++ infrastructure." />
-  <meta property="og:url" content="https://business.softadastra.com/supporters" />
-  <meta property="og:image" content="https://business.softadastra.com/og-logo.png" />
+  <meta property="og:url" content="https://cloud.softadastra.com/supporters" />
+  <meta property="og:image" content="https://cloud.softadastra.com/og-logo.png" />
+  <meta property="og:image:secure_url" content="https://cloud.softadastra.com/og-logo.png" />
 
   <meta name="twitter:title" content="Founding Supporters | Softadastra Cloud" />
   <meta name="twitter:description" content="Meet the founding supporters and builders helping Vix and Softadastra Cloud grow into sustainable C++ infrastructure." />
+  <meta name="twitter:image" content="https://cloud.softadastra.com/og-logo.png" />
 </svelte:head>
 
 <main class="supporters-page">

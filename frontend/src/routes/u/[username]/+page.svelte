@@ -14,7 +14,7 @@
   import type { PublicActivityEvent, PublicPackageSummary, PublicProfileResponse } from '$lib/api/types';
 
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? (browser ? window.location.protocol + '//' + window.location.hostname + ':8080' : '');
-  const SITE_URL = import.meta.env.VITE_PUBLIC_SITE_URL ?? 'https://business.softadastra.com';
+  const SITE_URL = import.meta.env.VITE_PUBLIC_SITE_URL ?? 'https://cloud.softadastra.com';
   const OG_IMAGE_URL = SITE_URL + '/og-logo.png';
   const validTabs = new Set(['overview', 'packages', 'activity']);
 
@@ -306,6 +306,7 @@ $: canCustomizePins = isOwner;
   <meta property="og:description" content={profileDescription} />
   <meta property="og:url" content={profileUrl} />
   <meta property="og:image" content={avatarUrl || OG_IMAGE_URL} />
+  <meta property="og:image:secure_url" content={avatarUrl || OG_IMAGE_URL} />
 
   <meta name="twitter:title" content={publicDisplayName + ' | Softadastra Cloud'} />
   <meta name="twitter:description" content={profileDescription} />
